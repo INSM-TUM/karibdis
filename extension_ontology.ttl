@@ -1,0 +1,42 @@
+# An extension of the base ontology with use case specific concepts
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+@prefix relation: <http://example.org/relations/> .
+@prefix type: <http://example.org/types/> .
+@prefix RiskClass: <http://example.org/instances/RiskClasss/> .
+
+
+type:ApplicationType rdf:type owl:Class ;
+    rdfs:label "Application Type" .
+    #TODO consider adding oneOf
+
+relation:ApplicationType rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain type:Case ;
+    rdfs:range type:ApplicationType .
+
+    
+
+relation:RequestedAmount rdf:type owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain type:Case ;
+    rdfs:range xsd:double .
+
+
+type:LoanGoal rdf:type owl:Class ;
+    rdfs:label "Loan Goal" .
+    #TODO consider adding oneOf
+
+relation:LoanGoal rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain type:Case ;
+    rdfs:range type:LoanGoal .
+
+
+type:RiskClass rdf:type owl:Class ;
+    rdfs:label "Risk Class" ; 
+    owl:oneOf (RiskClass:Low RiskClass:Medium RiskClass:High) .
+
+relation:RiskClass rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain type:LoanGoal ;
+    rdfs:range type:RiskClass .

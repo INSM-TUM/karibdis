@@ -1,0 +1,74 @@
+# A minimalistic base ontology for process knowledge
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+@prefix relation: <http://example.org/relations/> .
+@prefix type: <http://example.org/types/> .
+
+
+type:Task rdf:type owl:Class ;
+    rdfs:label "Task" .
+
+relation:directlyFollowedBy rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain type:Task ;
+    rdfs:range type:Task .
+
+relation:activatedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain type:Task ;
+    rdfs:range xsd:dateTime .
+
+relation:plannedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ; # This lifecycle phase can be argued to be domain-specific, but is included here for completenes purposeses
+    rdfs:domain type:Task ;
+    rdfs:range xsd:dateTime .
+    
+relation:startedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain type:Task ;
+    rdfs:range xsd:dateTime .
+    
+relation:completedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:domain type:Task ;
+    rdfs:range xsd:dateTime .
+
+
+type:Activity rdf:type owl:Class ;
+    rdfs:label "Activity" .
+
+relation:instanceOf rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain type:Task ;
+    rdfs:range type:Activity .
+
+
+type:Case rdf:type owl:Class ;
+    rdfs:label "Case" .
+
+relation:partOf rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain type:Task ;
+    rdfs:range type:Case .
+
+
+type:Resource rdf:type owl:Class ;
+    rdfs:label "Resource" .
+
+relation:performedBy rdf:type owl:ObjectProperty, owl:FunctionalProperty ; # Currently a functional property, i.e. 1-to-1 assigment
+    rdfs:domain type:Task ;
+    rdfs:range type:Resource .
+
+    
+type:Role rdf:type owl:Class ;
+    rdfs:label "Role" .
+
+relation:hasRole rdf:type owl:ObjectProperty; 
+    rdfs:domain type:Resource ;
+    rdfs:range type:Role .
+
+relation:canBeExecutedBy rdf:type owl:ObjectProperty ; 
+    rdfs:domain type:Activity ;
+    rdfs:range [ 
+        rdf:type owl:Class ;
+        owl:unionOf ( 
+            type:Resource
+            type:Role
+        )
+    ] .
