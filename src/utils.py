@@ -1,8 +1,16 @@
+import re
 from simulator import EventType
 from urllib.parse import quote, unquote
 
 def uri_to_id(uri):
     return unquote(uri.split('/')[-1]) # TODO this assumes a specific id translation; replace
+
+def de_urify(string):
+    def replace_url(uri_match):
+        uri = uri_match.group(1)
+        return '\'' + uri_to_id(uri) + '\''
+    return re.sub(r"'(http://example.org.*?)'", replace_uri, string)
+    
 
 task_lifecycle_relations = {
     EventType.TASK_ACTIVATE : 'activatedAt',
@@ -56,7 +64,6 @@ def namespace_string(graph):
 from IPython.display import Markdown, display
 def printmd(string):
     display(Markdown(string))
-
 
 
 from rdflib import RDF

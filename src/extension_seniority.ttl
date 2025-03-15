@@ -1,0 +1,27 @@
+@prefix activity: <http://example.org/instances/activitys/> .
+@prefix case: <http://example.org/instances/cases/> .
+@prefix task: <http://example.org/instances/tasks/> .
+@prefix relation: <http://example.org/relations/> .
+@prefix resource: <http://example.org/instances/resources/> .
+@prefix type: <http://example.org/types/> .
+
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://foobar.org/> .
+
+
+ex:SeniorityReward a sh:NodeShape ;
+    sh:targetClass type:resource ;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "{$this} has seniority {?value}" ;
+        sh:select """
+            SELECT  $this (?sen AS ?value)
+            WHERE {
+                $this ^relation:performedBy__hypothetical ?e1 .
+                $this relation:seniority ?sen
+            }
+        """ ;
+    ] .

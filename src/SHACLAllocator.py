@@ -22,78 +22,35 @@ base_prefixes = '''
 
 '''
 
-base_shacl_code = base_prefixes + '''
-
-
-ex:ExecutionPermissionConsistency a sh:NodeShape ;
-    sh:targetClass type:resource ;
-    sh:sparql [
-        a sh:SPARQLConstraint ;
-        sh:message "The resource '{$this}' is not allowed to perform the activity '{?value}'" ;
-        sh:select """
-            SELECT (?activity as ?value) (relation:performedBy__hypothetical AS ?path) $this ("Hi there!" as ?message)
-            WHERE {
-                ?task relation:performedBy__hypothetical $this .
-                ?task relation:instanceOf ?activity .
-                FILTER NOT EXISTS { 
-                    $this relation:hasRole* / ^relation:canBeExecutedBy ?activity .
-                }
-            }
-        """ ;
-    ] .
-
-
-@prefix ApplicationType: <http://example.org/instances/ApplicationTypes/> .
-
-ex:LikesConstraint a sh:NodeShape ;
-    sh:targetClass type:resource ;
-    ex:value 5 ;
-    sh:severity sh:Info;
-    sh:sparql [
-        a sh:SPARQLConstraint ;
-        sh:message "The resource '{$this}' likes to perform activities in cases of with attribute '{?value}'" ;
-        sh:select """
-            SELECT  $this (relation:performedBy__hypothetical AS ?path) (?applicationtype as ?value)
-            WHERE {
-                $this ^relation:performedBy__hypothetical / relation:partOf ?case .
-                ?case ?relation ?applicationtype .
-                FILTER EXISTS { 
-                    $this relation:likes ?applicationtype .
-                }
-            }
-        """ ;
-    ] .
-
-
-''' 
-
 
 class SHACLAllocator:
-    def __init__(self, graph_to_check : ProcessKnowledgeGraph, use_hypothetical=True):
-        self.shacl_graph = Graph().parse(data=base_shacl_code, format='n3') 
-        self.ontology = Graph().parse('base_ontology.ttl', format='n3')
+    def __init__(self, graph_to_check : ProcessKnowledgeGraph, base_ontology='./src/base_ontology.ttl', base_rules='./src/base_rules.ttl', use_hypothetical=True):
+        self.shacl_graph = Graph().parse(base_rules, format='n3') 
+        self.ontology = Graph().parse(base_ontology, format='n3')
         self.graph_to_check = graph_to_check
         self._first_time = True
         self.use_hypothetical = use_hypothetical
 
+    def load_extension(self, ontology_ext=None, rules_ext=None, **args):
+        if ontology_ext != None:
+            self.ontology.parse(ontology_ext, **args) 
+        if rules_ext != None:
+            self.shacl_graph.parse(rules_ext, **args)             
     
     def get_resource(self, task_node, threshold=float('-inf')):
         if self._first_time: # TODO temp
             printmd('#### Example Allocation Situation')
             draw_graph(self.graph_to_check)
+            self._first_time = False
             
         if len(list(self.graph_to_check.available_resources())) < 2: #TODO temp to enforce decisions
             return (float('-inf'), None, 'We need more drama')
             
         return next(iter(self.get_top_k_resources(task_node, k=1, threshold=threshold)), (float('-inf'), None, 'No fitting resource found'))
 
+    
     # Return the top k resources for the given task as ordered list of triples (score, resource_node, results_text)
     def get_top_k_resources(self, task_node, k=-1, threshold=float('-inf')):
-        
-        if self._first_time:
-            self._first_time = False
-            # self.init_shacl_graph()
-
         verdicts = []
         available_resources = list(self.graph_to_check.available_resources()) #& graph.valid_resources(task) 
         shuffle(available_resources)
@@ -133,7 +90,7 @@ class SHACLAllocator:
             else:
                 score += float('-inf')
             message = next(results_graph.objects(predicate=URIRef('http://www.w3.org/ns/shacl#resultMessage'), subject=result))
-            verdict += message + '\n'
+            verdict += de_urify(message) + '\n'
             # print('Ah, interesting: '+message)
         return score, verdict
         

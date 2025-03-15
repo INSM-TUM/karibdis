@@ -1,0 +1,58 @@
+@prefix activity: <http://example.org/instances/activitys/> .
+@prefix case: <http://example.org/instances/cases/> .
+@prefix task: <http://example.org/instances/tasks/> .
+@prefix relation: <http://example.org/relations/> .
+@prefix resource: <http://example.org/instances/resources/> .
+@prefix type: <http://example.org/types/> .
+
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://foobar.org/> .
+
+ex:FourEyesConstraint a sh:NodeShape ;
+    sh:targetClass type:resource ;
+    sh:severity sh:Error;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "There is a four-eyes-principle violation with '{?value}'" ;
+        sh:select """
+            SELECT  $this (relation:performedBy__hypothetical AS ?path) (?e2 AS ?value)
+            WHERE {
+                $this ^relation:performedBy__hypothetical ?e1 .
+                $this ^relation:performedBy ?e2 .
+                ?e1 relation:partOf ?case .
+                ?e2 relation:partOf ?case .
+                ?e1 relation:instanceOf ?a1 . 
+                ?e2 relation:instanceOf ?a2 .  
+                ?4e relation:contains ?a1 . 
+                ?4e relation:contains ?a2 .  
+                FILTER (?a1 != ?a2) .
+            }
+        """ ;
+    ] .
+
+# Reward rule, so the reasoning appears for fitting resources
+ex:FourEyesReward a sh:NodeShape ;
+    sh:targetClass type:resource ;
+    sh:severity sh:Info;
+    ex:value 5 ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Assignment conforms with four-eyes-principle with '{?othertask}'" ;
+        sh:select """
+            SELECT  $this (relation:performedBy__hypothetical AS ?path) (?e2 AS ?othertask)
+            WHERE {
+                $this ^relation:performedBy__hypothetical ?e1 .
+                ?r2 ^relation:performedBy ?e2 .
+                ?e1 relation:partOf ?case .
+                ?e2 relation:partOf ?case .
+                ?e1 relation:instanceOf ?a1 . 
+                ?e2 relation:instanceOf ?a2 .  
+                ?4e relation:contains ?a1 . 
+                ?4e relation:contains ?a2 .  
+                FILTER (?a1 != ?a2) .
+                FILTER ($this != ?r2) .
+            }
+        """ ;
+    ] .

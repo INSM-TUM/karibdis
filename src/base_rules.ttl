@@ -1,0 +1,48 @@
+@prefix activity: <http://example.org/instances/activitys/> .
+@prefix case: <http://example.org/instances/cases/> .
+@prefix task: <http://example.org/instances/tasks/> .
+@prefix relation: <http://example.org/relations/> .
+@prefix resource: <http://example.org/instances/resources/> .
+@prefix type: <http://example.org/types/> .
+
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://foobar.org/> .
+
+
+ex:ExecutionPermissionConstraint a sh:NodeShape ;
+    sh:targetClass type:resource ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "The resource '{$this}' is not allowed to perform the activity '{?value}'" ;
+        sh:select """
+            SELECT (?activity as ?value) (relation:performedBy__hypothetical AS ?path) $this 
+            WHERE {
+                ?task relation:performedBy__hypothetical $this .
+                ?task relation:instanceOf ?activity .
+                FILTER NOT EXISTS { 
+                    $this relation:hasRole* / ^relation:canBeExecutedBy ?activity .
+                }
+            }
+        """ ;
+    ] .
+
+ex:ExecutionPermissionReward a sh:NodeShape ;
+    sh:targetClass type:resource ;
+    sh:severity sh:Info;
+    ex:value 1 ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Resource has relevant role(s) for activity '{?activity}'" ;
+        sh:select """
+            SELECT ?activity (relation:performedBy__hypothetical AS ?path) $this 
+            WHERE {
+                ?task relation:performedBy__hypothetical $this .
+                ?task relation:instanceOf ?activity .
+                FILTER EXISTS { 
+                    $this relation:hasRole* / ^relation:canBeExecutedBy ?activity .
+                }
+            }
+        """ ;
+    ] .

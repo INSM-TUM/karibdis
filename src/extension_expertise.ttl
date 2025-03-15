@@ -1,0 +1,33 @@
+@prefix activity: <http://example.org/instances/activitys/> .
+@prefix case: <http://example.org/instances/cases/> .
+@prefix task: <http://example.org/instances/tasks/> .
+@prefix relation: <http://example.org/relations/> .
+@prefix resource: <http://example.org/instances/resources/> .
+@prefix type: <http://example.org/types/> .
+
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://foobar.org/> .
+
+
+@prefix ApplicationType: <http://example.org/instances/ApplicationTypes/> .
+
+ex:LikesConstraint a sh:NodeShape ;
+    sh:targetClass type:resource ;
+    ex:value 5 ;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "The resource '{$this}' likes to perform activities in cases of with attribute '{?value}'" ;
+        sh:select """
+            SELECT  $this (relation:performedBy__hypothetical AS ?path) (?applicationtype as ?value)
+            WHERE {
+                $this ^relation:performedBy__hypothetical / relation:partOf ?case .
+                ?case ?relation ?applicationtype .
+                FILTER EXISTS { 
+                    $this relation:likes ?applicationtype .
+                }
+            }
+        """ ;
+    ] .
