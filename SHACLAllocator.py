@@ -22,28 +22,6 @@ base_prefixes = '''
 
 '''
 
-clippings = '''
-# Shape for Task class
-ex:TaskShape
-    a sh:NodeShape ;
-    sh:targetClass type:task ;  # Target nodes of class Task
-    sh:property [
-        sh:path relation:instanceOf ;
-        sh:class type:activity ;  
-		sh:maxCount 1 ;
-        sh:minCount 1 ;
-        sh:message "Task needs an activity" ;
-    ] ;
-    sh:property [
-        sh:path relation:partOf;
-        sh:class type:case;  
-		sh:maxCount 1 ;
-		sh:minCount 1 ;
-        sh:message "Task needs a case" ;
-    ] ;
-.
-'''
-
 base_shacl_code = base_prefixes + '''
 
 
@@ -93,7 +71,7 @@ ex:LikesConstraint a sh:NodeShape ;
 class SHACLAllocator:
     def __init__(self, graph_to_check : ProcessKnowledgeGraph, use_hypothetical=True):
         self.shacl_graph = Graph().parse(data=base_shacl_code, format='n3') 
-        self.ontology = Graph().parse('main/base_ontology.ttl', format='n3')
+        self.ontology = Graph().parse('base_ontology.ttl', format='n3')
         self.graph_to_check = graph_to_check
         self._first_time = True
         self.use_hypothetical = use_hypothetical

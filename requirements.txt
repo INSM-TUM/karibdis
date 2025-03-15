@@ -1,0 +1,7 @@
+jupyterlab
+rdflib
+pyshacl
+pandas
+networkx 
+matplotlib
+yfiles_jupyter_graphs
