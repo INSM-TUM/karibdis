@@ -28,26 +28,25 @@ class SHACLAllocator:
         self.shacl_graph = Graph().parse(base_rules, format='n3') 
         self.ontology = Graph().parse(base_ontology, format='n3')
         self.graph_to_check = graph_to_check
-        self._first_time = True
-        self.use_hypothetical = use_hypothetical
+        self.use_hypothetical  = use_hypothetical 
 
-    def load_extension(self, ontology_ext=None, rules_ext=None, **args):
+    def load_extension(self, ontology_ext=None, rules_ext=None, instance_ext=None, **args):
         if ontology_ext != None:
             self.ontology.parse(ontology_ext, **args) 
         if rules_ext != None:
-            self.shacl_graph.parse(rules_ext, **args)             
+            self.shacl_graph.parse(rules_ext, **args)      
+        if instance_ext != None:
+            self.graph_to_check.parse(instance_ext, **args)             
     
     def get_resource(self, task_node, threshold=float('-inf')):
-        if self._first_time: # TODO temp
-            printmd('#### Example Allocation Situation')
-            draw_graph(self.graph_to_check)
-            self._first_time = False
             
         if len(list(self.graph_to_check.available_resources())) < 2: #TODO temp to enforce decisions
             return (float('-inf'), None, 'We need more drama')
             
-        return next(iter(self.get_top_k_resources(task_node, k=1, threshold=threshold)), (float('-inf'), None, 'No fitting resource found'))
+        return next(iter(self.get_top_k_resources(task_node, k=1, threshold=threshold)), self.no_resource_found())
 
+    def no_resource_found(self):
+        return (float('-inf'), None, 'No fitting resource found')
     
     # Return the top k resources for the given task as ordered list of triples (score, resource_node, results_text)
     def get_top_k_resources(self, task_node, k=-1, threshold=float('-inf')):
@@ -90,7 +89,7 @@ class SHACLAllocator:
             else:
                 score += float('-inf')
             message = next(results_graph.objects(predicate=URIRef('http://www.w3.org/ns/shacl#resultMessage'), subject=result))
-            verdict += de_urify(message) + '\n'
+            verdict += '\t' + de_urify(message) + '\n'
             # print('Ah, interesting: '+message)
         return score, verdict
         
@@ -109,7 +108,7 @@ class SHACLAllocator:
             r = validate(self.graph_to_check,
                   shacl_graph=self.shacl_graph,
                   ont_graph=self.ontology,
-                  inference='rdfs',
+                  inference=None, # TODO 'both',
                   abort_on_first=False,
                   allow_infos=True,
                   allow_warnings=True,

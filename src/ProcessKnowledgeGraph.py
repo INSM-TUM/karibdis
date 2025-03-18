@@ -6,7 +6,7 @@ from pandas import notna
 class ProcessKnowledgeGraph(Graph):
     #TODO add default attribute aliases
     def __init__(self, attribute_aliases=default_attribute_aliases, namespace=Namespace('http://example.org/'), case_attributes=set(), ignore_attributes=set(), entity_attributes=set()):
-        super(ProcessKnowledgeGraph, self).__init__()
+        super().__init__()
         self.namespace = namespace
         self.attribute_aliases = attribute_aliases
 
@@ -48,7 +48,7 @@ class ProcessKnowledgeGraph(Graph):
         return next(iter(set(self.objects(subject=case, predicate=~self.attribute_relation(Keys.CASE))) - set(self.objects(subject=case, predicate=~self.attribute_relation(Keys.CASE) / ~self.attribute_relation(Keys.DIRECTLY_FOLLOWED_BY)))), None)
 
     def unassigned_tasks(self):
-        return set(self.objects(predicate=~self.attribute_relation(Keys.CASE))) - set(self.subjects(predicate=self.attribute_relation('Keys.RESOURCE')))
+        return set(self.objects(predicate=~self.attribute_relation(Keys.CASE))) - set(self.subjects(predicate=self.attribute_relation(Keys.RESOURCE)))
 
     def available_resources(self):
         return set(self.subjects(predicate=self.attribute_relation('available'), object=Literal(True)))
@@ -62,11 +62,11 @@ class ProcessKnowledgeGraph(Graph):
             self.add((resource_node, self.attribute_relation('available'), Literal(is_available(resource_node))))
 
     def handle_assignment(self, task_node, resource_node):
-        self.add((task_node, self.attribute_relation('Keys.RESOURCE'), resource_node))
+        self.add((task_node, self.attribute_relation(Keys.RESOURCE), resource_node))
         self.set_node_attribute(resource_node, 'available', Literal(False))
             
     # Can be overriden, currently assumes entities as dicts
-    def get_entity_attr(self, entity, attr):
+    def get_entity_attr(self, entity, attr : str | Keys):
         return entity[attr]
 
     # Can be overriden, currently assumes entities as dicts
@@ -87,15 +87,14 @@ class ProcessKnowledgeGraph(Graph):
 
         attr_triple = (entity_node, self.attribute_relation(attr), attr_node)
         if attr_triple not in self:
-            self.remove((entity_node, self.attribute_relation(attr), None)) # Override previous value; TODO: What about multi-value attributes?
-            self.add(attr_triple)
+            self.set(attr_triple) # Override previous value; TODO: What about multi-value attributes?
 
         return attr_triple
 
     def translate_event(self, event):
         # Add basic node
-        node = self.entity_instance_node('task', self.get_entity_attr(event, Keys.ID))
-        self.add((node, RDF.type, self.entity_type_node('task')))
+        node = self.entity_instance_node(Keys.TASK, self.get_entity_attr(event, Keys.ID))
+        self.add((node, RDF.type, self.entity_type_node(Keys.TASK)))
 
         # Connect to case node an case tail
         currentCase = self.get_entity_attr(event, Keys.CASE)
@@ -115,7 +114,6 @@ class ProcessKnowledgeGraph(Graph):
 
     def lazy_load_resources(self, resources, roles, activities, can_role_execute, can_resource_execute):
             # XXX check if lazy init works here
-            # TODO magic strings here
         
         for activity in activities: # TODO refactor "Add if not known pattern"
             activity_node = self.entity_instance_node(Keys.ACTIVITY, activity)
@@ -143,3 +141,22 @@ class ProcessKnowledgeGraph(Graph):
                     self.add((self.entity_instance_node(Keys.ACTIVITY, activity), self.attribute_relation(Keys.CAN_BE_EXECUTED_BY), role_node))
             for resource in associated_resources:
                     self.add((self.entity_instance_node(Keys.RESOURCE, resource), self.attribute_relation(Keys.ROLE), role_node))
+    
+    def uri(self, string):
+        prefix, id = string.split(':', 1)
+        _, uri = next(filter(lambda nsp : nsp[0] == prefix, self.namespace_manager.namespaces()))
+        return uri + quote(id)
+
+    def add_entity(self, etype : str | Keys, eid : str):
+        self.add(self.entity_triple(etype, eid))
+
+    def add_from_strings(self, subject_string, relationship_name, object_string):
+        self.add((self.uri(subject_string), self.attribute_relation(relationship_name), self.uri(object_string)))
+
+    def subgraph_available_resources(self):
+        available_resources = set(self.available_resources())
+        resources_assigned = set(self.objects(predicate=self.attribute_relation('performedBy')))
+        relevant_resources = available_resources | resources_assigned
+        filtered_graph = self - set(filter(lambda triple : ('resource' in ''.join(triple)) and len(set(triple) & relevant_resources) == 0, self))
+        filtered_graph.namespace_manager = self.namespace_manager
+        return filtered_graph

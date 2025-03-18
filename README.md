@@ -19,3 +19,8 @@ pip install -r requirements.txt -r requirements_bpoc.txt
 
 ## Known Issues
 - The simulator frame periodically returns a division by zero error (not caused by this project). In that case, just rerun the simulation
+- The simulator might get stuck by only appropriating resources that cannot run the currently open tasks. In that case, just rerun the simulation
+
+
+# External Files
+This repository contains the `BPI Challenge 2017 - clean.csv` event log file retrieved from [the bpoc project](https://github.com/bpogroup/bpo-project/blob/a4aa6331166648b1920ef741e7a1eb65b8438904/bpo/resources/BPI%20Challenge%202017%20-%20clean.zip)

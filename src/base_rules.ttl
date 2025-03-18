@@ -11,8 +11,9 @@
 @prefix ex: <http://foobar.org/> .
 
 
-ex:ExecutionPermissionConstraint a sh:NodeShape ;
+ex:ExecutionPermissionConstraint a sh:PropertyShape ;
     sh:targetClass type:resource ;
+    sh:path relation:performedBy__hypothetical;
     sh:sparql [
         a sh:SPARQLConstraint ;
         sh:message "The resource '{$this}' is not allowed to perform the activity '{?value}'" ;
@@ -28,8 +29,9 @@ ex:ExecutionPermissionConstraint a sh:NodeShape ;
         """ ;
     ] .
 
-ex:ExecutionPermissionReward a sh:NodeShape ;
+ex:ExecutionPermissionReward a sh:PropertyShape ;
     sh:targetClass type:resource ;
+    sh:path relation:performedBy__hypothetical;
     sh:severity sh:Info;
     ex:value 1 ;
     sh:sparql [
