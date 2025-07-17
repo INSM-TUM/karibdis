@@ -1,6 +1,8 @@
 # ============= Project-Specific ==================
 bpo-project
 Business Process Optimization Competition 2023
+.virtual_documents
+data_rule_mining
 
 # ============= Template ==================
 
