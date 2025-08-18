@@ -13,6 +13,9 @@ class ProcessKnowledgeGraph(Graph):
         with importlib.resources.open_text('karibdis', 'base_ontology.ttl') as file:
             self.parse(file=file)
 
+        with importlib.resources.open_text('karibdis', 'base_rules.ttl') as file:
+            self.parse(file=file)
+
 
     def unassigned_tasks(self):
         return set(self.objects(predicate=~BPO.partOf)) - set(self.subjects(predicate=BPO.performedBy))

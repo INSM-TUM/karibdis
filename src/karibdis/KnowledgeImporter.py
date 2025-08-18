@@ -21,7 +21,7 @@ from itertools import zip_longest
 
 
 
-
+# TODO are these even still used?
 # Copied and adapted from Business Process Optimization Competition 2023
 # https://github.com/bpogroup/bpo-project/
 class EventType(Enum):
@@ -56,6 +56,8 @@ class Keys(enum.Enum):
     # ROLE = BPO.Role, BPO.hasRole
 
     ID = None, 'id'
+    TIMESTAMP = None, None
+    LIFECYCLE = None, None
     # DIRECTLY_FOLLOWED_BY = None, BPO.directlyFollowedBy
     # CAN_BE_EXECUTED_BY = None, BPO.canBeExecutedBy
 
@@ -63,7 +65,8 @@ default_attribute_aliases = {
     'concept:name' : BPO.Activity,
     'case:concept:name' : BPO.Case,
     'org:resource' : BPO.Resource,
-#    'OfferID' : ('offer', 'offer') #TODO
+    'time:timestamp' : Keys.TIMESTAMP,
+    'lifecycle:transition' : Keys.LIFECYCLE,
 }
 
 default_attribute_relations = {
@@ -78,6 +81,11 @@ task_lifecycle_relations = {
     EventType.TASK_PLANNED : BPO.plannedAt,
     EventType.START_TASK : BPO.startedAt,
     EventType.COMPLETE_TASK : BPO.completedAt,
+}
+
+default_lifecycle_relations = {
+    'start' : EventType.START_TASK,
+    'complete' : EventType.COMPLETE_TASK,
 }
 
 
@@ -210,7 +218,15 @@ Please output only True or False, whether the entities represented are related.'
 
 class SimpleEventLogImporter(KnowledgeImporter):
 
-    def __init__(self, pkg : ProcessKnowledgeGraph, namespace_name='log', namespace=Namespace('http://example.org/'), attribute_aliases=default_attribute_aliases, entity_columns=set(), value_columns=set(), ignore_columns=set()):
+    def __init__(
+            self, 
+            pkg : ProcessKnowledgeGraph, 
+            namespace_name='log', 
+            namespace=Namespace('http://example.org/'), 
+            attribute_aliases=default_attribute_aliases, 
+            entity_columns=set(), 
+            value_columns=set(), 
+            ignore_columns=set()):
         super().__init__(pkg)
 
         self.namespace_name = namespace_name
@@ -220,7 +236,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.attribute_aliases = attribute_aliases
         self.reverse_attribute_aliases = dict((v, k) for k, v in attribute_aliases.items())
 
-        self.ignore_columns = set(ignore_columns).union(set([BPO.Case, Keys.ID])) # These two are handled differently
+        self.ignore_columns = set(ignore_columns).union(set([BPO.Case, Keys.ID, Keys.LIFECYCLE, Keys.TIMESTAMP])) # These are handled differently
         self.entity_columns = set(entity_columns).union(set([BPO.Case, BPO.Activity]))
         self.value_columns = set(value_columns)
 
@@ -309,13 +325,25 @@ class SimpleEventLogImporter(KnowledgeImporter):
             return Literal(col.value_counts(dropna=True).index[0]).datatype # Get most common value inferred datatype
 
 
-    
+# Imports events as they occur
 class OnlineEventImporter(SimpleEventLogImporter):
 
-    def __init__(self, pkg : ProcessKnowledgeGraph, namespace_name='log', namespace=Namespace('http://example.org/'), attribute_aliases=default_attribute_aliases, attribute_relations=dict(), entity_columns=set(), value_columns=set(), ignore_columns=set(), case_attributes=set()):
+    def __init__(
+            self, 
+            pkg : ProcessKnowledgeGraph, 
+            namespace_name='log', 
+            namespace=Namespace('http://example.org/'), 
+            attribute_aliases=default_attribute_aliases, 
+            attribute_relations=dict(), 
+            lifecycle_relations=default_lifecycle_relations,
+            entity_columns=set(), 
+            value_columns=set(), 
+            ignore_columns=set(), 
+            case_attributes=set()):
         super().__init__(pkg, namespace_name, namespace, attribute_aliases, entity_columns, value_columns, ignore_columns)
         self.attribute_relations = dict(default_attribute_relations)
         self.attribute_relations.update(attribute_relations)
+        self.lifecycle_relations = lifecycle_relations
         self.case_attributes = set(case_attributes)
 
     
@@ -356,22 +384,40 @@ class OnlineEventImporter(SimpleEventLogImporter):
         case_node = self.entity_instance_node(BPO.Case, current_case)
 
         # Add basic node
-        node = self.entity_instance_node(BPO.Task, self.task_id_for_event(event, current_case, case_node)) # TODO: Why infer type task? Could be different event!
-        self.add((node, RDF.type, BPO.Task))
+        task_node = self.entity_instance_node(BPO.Task, self.task_id_for_event(event, current_case, case_node)) # TODO: Why infer type task? Could be different event!
+        self.add((task_node, RDF.type, BPO.Task))
 
         # Connect to case node an case tail
         current_tail = self.case_tail(case_node)
-        self.set_node_attribute(node, BPO.Case, current_case)
+        self.set_node_attribute(task_node, BPO.Case, current_case)
         if current_tail:
             # Connect to to preceding node
-            self.add((current_tail, BPO.directlyFollowedBy, node))
+            self.add((current_tail, BPO.directlyFollowedBy, task_node))
 
-        # Add event attributes
-        for attr in self.get_entity_attr_list(event):
+        attributes = self.get_entity_attr_list(event)
+
+        # Log lifecycle transition timestamp
+        if Keys.TIMESTAMP in attributes:
+            value = self.get_entity_attr(event, Keys.TIMESTAMP)
+            event_type = None
+            if Keys.LIFECYCLE in attributes:
+                lifecycle_attr = self.get_entity_attr(event, Keys.LIFECYCLE)
+                event_type = self.lifecycle_relations.get(lifecycle_attr, None) # Explicitly None for unknown lifecycle values
+            else:
+                event_type = EventType.COMPLETE_TASK
+            if event_type: # Otherwise, there is a lifecycle value, but none that has a translation
+                self.add((task_node, task_lifecycle_relations[event_type], Literal(value)))
+
+
+        # Add event attributes to either task or case
+        for attr in attributes:
             value = self.get_entity_attr(event, attr)
-            target = node if (attr not in self.case_attributes) else case_node
+            target = task_node if (attr not in self.case_attributes) else case_node
+
             if notna(value) and (attr not in self.ignore_columns): 
                 self.set_node_attribute(target, attr, value)
+
+                
 
     def case_tail(self, case_node):
         def case_tail_in(graph, case_node):

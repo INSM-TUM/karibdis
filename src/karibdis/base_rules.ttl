@@ -1,0 +1,44 @@
+@prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
+@prefix ex: <http://infs.cit.tum.de/karibdis/rules/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+
+ex:ExtendStaleCasesRule a sh:NodeShape ;
+    sh:targetClass :Case ;
+    sh:condition ex:ExtendStaleCasesRule; 
+	sh:rule [
+        a sh:SPARQLRule ;
+		sh:prefixes ex: ;
+		sh:construct """
+            PREFIX ex: <http://infs.cit.tum.de/karibdis/rules/>
+			CONSTRUCT {
+				?next :partOf $this .
+				?next rdf:type :Task .
+			} WHERE {
+                FILTER NOT EXISTS {
+                    ?task :partOf $this .
+                    FILTER NOT EXISTS { ?task :completedAt ?any }
+                }
+                FILTER NOT EXISTS {
+                    $this :isClosed true
+                }
+				BIND (ex:nexttask($this) AS ?next) .
+			}
+        """ ;
+	] .
+
+ex:nexttask
+    a sh:SPARQLFunction ;
+    sh:parameter [
+        sh:path ex:op1 ;
+        sh:datatype :Case ;
+        sh:description "The case" ;
+    ] ;
+    sh:returnType :Task ;
+    sh:select """
+        SELECT (URI(CONCAT(STRBEFORE(str(?op1), "Case_"), "Task_", STRAFTER(str(?op1), "Case_"), "_", STR(COUNT(?c) + 1))) AS ?result)
+        WHERE {
+            ?c :partOf ?op1.
+    }""".

@@ -53,6 +53,11 @@
     rdfs:range :Case ;
     rdfs:comment "The case a task belongs to".
 
+:isClosed rdf:type owl:DatatypeProperty, owl:FunctionalProperty ;
+    rdfs:domain :Case ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the case is closed, i.e., not more events are expected to happen".
+
 
 :Resource rdf:type owl:Class ;
     rdfs:label "Resource" ;
