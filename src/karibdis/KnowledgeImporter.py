@@ -536,16 +536,17 @@ class ExistingOntologyImporter(KnowledgeImporter):
     def __init__(self, pkg : ProcessKnowledgeGraph):
         super().__init__(pkg)
 
+    
+    def accept_filtered_result(self, result, ontology):
+        self.addition_graph += result
+        # Add predicates metadata so annotation properties can be used
+        predicates = set(self.addition_graph.predicates())
+        self.addition_graph += list(filter(lambda triple: triple[0] in predicates or triple[2] in predicates, ontology))
+
     def import_ontology(self, ontology, initial_query=None):
 
-        def accept_filtered_result(result):
-            self.addition_graph += result
-            # Add predicates metadata so annotation properties can be used
-            predicates = set(self.addition_graph.predicates())
-            self.addition_graph += list(filter(lambda triple: triple[0] in predicates or triple[2] in predicates, ontology))
-
         with self.ui:
-            self.ui.prompt_selection_query(ontology, callback_accept=accept_filtered_result, initial_query=initial_query)
+            self.ui.prompt_selection_query(ontology, callback_accept=lambda result: self.accept_filtered_result(result, ontology), initial_query=initial_query)
 
 
 
@@ -772,8 +773,10 @@ class ImporterJupyterUI2(ImporterUI):
                     w.Button(description='Edit', on_click=lambda: set_editing(True))
                     # w.Button(description='Cancel')
                 if len(importer.addition_graph) == 0:
-                    w.Label('No data to visualize.')
-                else: # TODO add guard against too large graphs
+                    w.Label(value='No data to visualize.')
+                elif len(importer.addition_graph.all_nodes()) > 100:
+                    w.Label(value=f'Too many nodes ({len(importer.addition_graph.all_nodes())}) to visualize.')
+                else:
                     graph = ImporterJupyterUI2.visualize_addition_graph(importer)
                     display(graph)
             else:
@@ -788,7 +791,7 @@ class ImporterJupyterUI2(ImporterUI):
     @staticmethod
     @reacton.component
     def show_edit(importer, init_value, set_editing):
-        with w.VBox() as main:
+        with w.VBox(layout = ipywidgets.Layout(width='100%', height='98%')) as main:
             text_value, set_text_value = reacton.use_state(init_value)
             text = w.Textarea(
                 layout = ipywidgets.Layout(width='98%'),
@@ -806,45 +809,59 @@ class ImporterJupyterUI2(ImporterUI):
             button_accept = w.Button(description='Accept Edit', on_click=accept_edit)
             button_cancel = w.Button(description='Cancel Edit', on_click=lambda: set_editing(False))
         return main
-
+    
     def prompt_selection_query(self, graph, initial_query=None, callback_accept=None):
-        self.output = ipywidgets.Output()
+        pass
 
-        label = ipywidgets.Label()
-        def update_label(result_size):
-            label.value = f'You are about to load {result_size} tuples. Adapt the query if appropriate.'
-
-        if initial_query is None: # TODO consider adding namespaces per default
-            initial_query = '''
+    @staticmethod
+    @reacton.component
+    def query_view(graph, set_processing, initial_query=None, callback_accept=None):
+        # TODO consider adding namespaces per default
+        default_initial_query = ''' 
 SELECT ?subject ?predicate ?object
 WHERE {?subject ?predicate ?object} 
-'''
-        text = ipywidgets.Textarea(
-            layout = ipywidgets.Layout(width='98%'),
-            value = initial_query,
-            rows = len(initial_query.split('\n'))
-        )
+'''  
+        dirty, set_dirty = reacton.use_state(True)
+        current_result, set_current_result = reacton.use_state(None)
+        current_result_size, set_current_result_size = reacton.use_state(0)
+        query, _set_query = reacton.use_state(initial_query if initial_query else default_initial_query) 
+        def set_query(value):
+            set_dirty(True)
+            _set_query(value)
 
-        button_accept = ipywidgets.Button(description='Load Data')
-        def accept(b=None):
-            with self.output:
-                callback_accept(graph.query(text.value)) # TODO reduc unnecessary duplicate query running
-                self.output.clear_output()
-                print('Ontology successfully queries.')
-        button_accept.on_click(accept)
+        with w.VBox(layout = ipywidgets.Layout(width='100%', height='98%')) as main:          
 
-        button_edit = ipywidgets.Button(description='Update Query')
-        def edit(b=None):
-            button_edit.disabled = True
-            update_label(len(graph.query(text.value)))
-            button_edit.disabled = False
+            text = w.Textarea(
+                layout = w.Layout(width='98%'),
+                value = query,
+                on_value=set_query,
+                rows = len(query.split('\n')) + 2
+            )
+            
+            # label = w.Label(value = f'{current_result} {dirty}')
 
-        button_edit.on_click(edit)
+            with w.HBox():
+                if current_result is not None and not dirty:
+                    def accept(b=None):
+                        callback_accept(current_result) # TODO reduce unnecessary duplicate query running
+                        print('Ontology successfully queried.')
 
-        button_cancel = ipywidgets.Button(description='Cancel')
-        with self.output:
-            self.output.clear_output()
-            edit()
-            display(label, text, button_accept, button_edit, button_cancel)
+                    label = w.Label(value = f'You are about to load {current_result_size} tuples. Adapt the query if appropriate.')
+                    button_accept = w.Button(description='Load Data', on_click=accept)
 
-        display(self.output)
+                else:
+                    def edit(b=None):
+                        set_processing(True)
+                        button_edit.disabled = True
+                        query_result = graph.query(query)
+                        print(query_result)
+                        set_current_result_size(len(query_result))
+                        set_dirty(False)
+                        set_current_result(query_result)
+                        button_edit.disabled = False
+                        set_processing(False)
+                    button_edit = w.Button(description='Test Query', on_click=edit)
+
+            # TODO one initial edit
+
+        return main

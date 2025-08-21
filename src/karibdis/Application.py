@@ -28,7 +28,7 @@ class JupyterApplication(ipywidgets.Box):
         
     def base_view(self):
         tabs = [
-            ('Knowledge Modeling', reacton.render_fixed(KnowledgeModelingUI())[0]),
+            ('Knowledge Modeling', reacton.render_fixed(KnowledgeModelingUI(self.system.pkg))[0]),
             ('Process Execution', reacton.render_fixed(PrescriptionAndTaskUI())[0]),
         ]
         root = ipywidgets.Tab()
@@ -55,7 +55,7 @@ class JupyterApplication(ipywidgets.Box):
             self.children = [ipywidgets.Label("Prescription and Task UI"), graph]
 
             
-
+# TODO make proper enums
 TEXT = 'Text'
 EVENT_LOG = 'Event Log'
 EXISTING_ONTOLOGY = 'Existing Ontology'
@@ -107,38 +107,70 @@ def ActiveImportUI(source, set_source, pkg):
         terminate()
     
     w.Label(value=f"Import from {source}. Currently importing {count} tuples. Importer: {importer}. Stage: {stage}. {'processing...' if is_processing else ''}")
-    if is_processing:
-        w.Label(value="PROCESSING") # TODO nice loading wheel
-    elif stage == EXTRACT:
-            
-        if source == TEXT:
-            if importer == None:
-                _importer = TextualImporter(pkg)
-                _importer.ui = ImporterJupyterUI2(_importer)
-                set_importer(_importer)
-                print('Constructed Importer')
-            text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test') #TODO
-            w.Textarea(value=text, on_value=set_text, rows=10, layout = ipywidgets.Layout(width='98%'))
-            def load_statement():
-                set_processing(True)
-                importer.import_content_from_statement(text)
-                set_text('')
-                set_count(len(importer.addition_graph))
-                set_processing(False)
-                set_stage(ALIGN)
-            w.Button(description="Confirm", on_click=load_statement)
-            # w.Button(description="Continue to alignment", on_click=) TODO allow import of multiple statements
-        
-        elif source == EVENT_LOG:
-            w.Label(value="Event Log")
-        elif source == EXISTING_ONTOLOGY:
-            w.Label(value="Existing")
 
-    elif stage == ALIGN:
-        AlignmentUI(importer, set_stage, set_processing)
+    with w.Box(): # Needs its own box, as otherwise would lead to a whole reload of normal view, which leads to loss of data
+        if is_processing:
+            w.Label(value="PROCESSING") # TODO nice loading wheel that blocks inputs
+    with w.Box(layout = ipywidgets.Layout(width='100%', height='98%')): 
+        if stage == EXTRACT:
+                
+            if source == TEXT:
+                if importer == None:
+                    _importer = TextualImporter(pkg)
+                    _importer.ui = ImporterJupyterUI2(_importer)
+                    set_importer(_importer)
+                    print('Constructed Importer')
+                text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test') #TODO
+                w.Textarea(value=text, on_value=set_text, rows=10, layout = ipywidgets.Layout(width='98%'))
+                def load_statement():
+                    set_processing(True)
+                    importer.import_content_from_statement(text)
+                    set_text('')
+                    set_count(len(importer.addition_graph))
+                    set_processing(False)
+                    set_stage(ALIGN)
+                w.Button(description="Confirm", on_click=load_statement)
+                # w.Button(description="Continue to alignment", on_click=) TODO allow import of multiple statements
             
-    elif stage == VALIDATE:
-        ImporterJupyterUI2.validation_view(importer, complete)
+            elif source == EVENT_LOG:
+                w.Label(value="Event Log")
+                
+            elif source == EXISTING_ONTOLOGY:
+                ontology, set_ontology = reacton.use_state(None)
+                def load_from_subgraph(subgraph):
+                    set_processing(True)
+                    importer.accept_filtered_result(subgraph, ontology)
+                    set_count(len(importer.addition_graph))
+                    set_processing(False)
+                    set_stage(ALIGN)
+                    
+                if importer == None:
+                    _importer = ExistingOntologyImporter(pkg)
+                    set_importer(_importer)
+                    print('Constructed Importer')
+                else:
+                    if ontology != None:
+                        ImporterJupyterUI2.query_view(ontology, set_processing, callback_accept=load_from_subgraph)
+                    else: 
+                        def upload(files):
+                            file = files[0]
+                            data = str(file.content,'utf-8')
+                            graph = Graph().parse(data=data, format='ttl')
+                            set_ontology(graph)
+                        
+                        w.FileUpload(
+                            description = 'Upload Ontology File',
+                            accept='.ttl',
+                            on_accept=lambda **args: print(args),
+                            multiple=False,
+                            on_value=upload
+                        )
+    
+        elif stage == ALIGN:
+            AlignmentUI(importer, set_stage, set_processing)
+                
+        elif stage == VALIDATE:
+            ImporterJupyterUI2.validation_view(importer, complete)
         
     w.Button(description="Cancel", on_click=cancel)
 
