@@ -117,7 +117,6 @@ def ActiveImportUI(source, set_source, pkg):
             if source == TEXT:
                 if importer == None:
                     _importer = TextualImporter(pkg)
-                    _importer.ui = ImporterJupyterUI2(_importer)
                     set_importer(_importer)
                     print('Constructed Importer')
                 text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test') #TODO
@@ -133,8 +132,92 @@ def ActiveImportUI(source, set_source, pkg):
                 # w.Button(description="Continue to alignment", on_click=) TODO allow import of multiple statements
             
             elif source == EVENT_LOG:
-                w.Label(value="Event Log")
-                
+                log, set_log = reacton.use_state(None)
+
+                if importer == None:
+                    _importer = SimpleEventLogImporter(pkg)
+                    set_importer(_importer)
+                    print('Constructed Importer')
+
+                elif log is None:
+                    def upload(files): # TODO code duplicate to ontology importer
+                        file = files[0]
+                        _log = None
+                        import tempfile 
+                        with tempfile.NamedTemporaryFile() as f:
+                            f.write(file.content)
+                            _log = pm4py.read_xes(f.name) # also support csv at some point
+                        set_log(_log)
+                    
+                    w.FileUpload(
+                        description = 'Upload Event Log File',
+                        accept='.xes',
+                        on_accept=lambda **args: print(args),
+                        multiple=False,
+                        on_value=upload
+                    )
+                else:
+                    
+                    dirty, set_dirty = reacton.use_state(False)
+                    
+                    def change_col_type(column, value):
+                        if value == 'ENTITY':
+                            importer.entity_columns.add(column)
+                        else:
+                            importer.entity_columns.discard(column)
+                            
+                        if value == 'VALUE':
+                            importer.value_columns.add(column)
+                        else:
+                            importer.value_columns.discard(column)
+                            
+                        if value == 'IGNORE':
+                            importer.ignore_columns.add(column)
+                        else:
+                            importer.ignore_columns.discard(column)
+                        set_dirty(True)
+
+                    def change_col_alias(col_key, value):
+                        importer.change_col_alias(col_key, value)
+                        set_dirty(True)
+                    def load_log_entities():
+                        set_processing(True)
+                        importer.import_event_log_entities(log) # TODO duplicate code except this line
+                        set_count(len(importer.addition_graph))
+                        set_processing(False)
+                        set_stage(ALIGN)
+
+                        
+                    if not dirty:
+                        with w.VBox():
+                            #grid = w.GridspecLayout(n_rows=len(log.columns), n_columns=2)
+                            grid = w.Layout(grid_template_columns='1fr 1fr 1fr')
+                            with w.GridBox(layout=grid):
+                                w.Label(value='Attribute') 
+                                w.Label(value='Type') 
+                                w.Label(value='Map To') 
+                                for i, col in enumerate(log.columns):
+                                    key = importer.get_col_key(col)
+                                    
+                                    w.Label(value=f'{col}') 
+                                    
+                                    is_entity_column, is_value_column = importer.determine_col_type(key, log[col])
+                                    w.Dropdown(
+                                        options=['ENTITY', 'VALUE', 'IGNORE'],
+                                        value=(is_entity_column and 'ENTITY') or (is_value_column and 'VALUE') or 'IGNORE',
+                                        on_value=lambda x, key=key: change_col_type(key, x)
+                                    )
+                                    
+                                    alias = importer.attribute_aliases.get(col, None)
+                                    w.Dropdown(
+                                        options=list(importer.attribute_aliases.values()) + [None], # TODO 1: Make nice labels by shortening URIs # TODO 2: Allow more options / custom input
+                                        value=alias,
+                                        on_value=lambda x, key=key: change_col_alias(key, x)
+                                    )
+                            w.Button(description="Load Entities", on_click=load_log_entities)
+                    else:
+                        set_dirty(False) # Force Reload
+                            
             elif source == EXISTING_ONTOLOGY:
                 ontology, set_ontology = reacton.use_state(None)
                 def load_from_subgraph(subgraph):
@@ -144,12 +227,12 @@ def ActiveImportUI(source, set_source, pkg):
                     set_processing(False)
                     set_stage(ALIGN)
                     
-                if importer == None:
+                if importer is None:
                     _importer = ExistingOntologyImporter(pkg)
                     set_importer(_importer)
                     print('Constructed Importer')
                 else:
-                    if ontology != None:
+                    if ontology is not None:
                         ImporterJupyterUI2.query_view(ontology, set_processing, callback_accept=load_from_subgraph)
                     else: 
                         def upload(files):

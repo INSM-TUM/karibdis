@@ -106,6 +106,9 @@ class KnowledgeImporter(ABC):
     ### ===== Alignment =====
     def determine_alignment(self, addition_node_filter=None, target_node_filter=None, addition_text_params={}, target_text_params={}):
         
+        # TODO: Prefilter, e.g., 
+        # - nodes that are already in the graph, to avoid matchings like :Resource -> :Resource
+
         print('Textualizing graphs for alignment...')
         addition_texts = textualize_graph(self.addition_graph, graph_annotations_properties(self.addition_graph, **addition_text_params), filter_func=addition_node_filter)
         target_texts = textualize_graph(self.pkg, graph_annotations_properties(self.pkg, **target_text_params), filter_func=target_node_filter)
@@ -239,12 +242,22 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.addition_graph.bind(self.namespace_name, self.namespace, override=True)
 
         self.attribute_aliases = attribute_aliases
-        self.reverse_attribute_aliases = dict((v, k) for k, v in attribute_aliases.items())
+        self.recalculate_reverse_aliases()
 
         self.ignore_columns = set(ignore_columns).union(set([BPO.Case, Keys.ID, Keys.LIFECYCLE, Keys.TIMESTAMP])) # These are handled differently
         self.entity_columns = set(entity_columns).union(set([BPO.Case, BPO.Activity]))
         self.value_columns = set(value_columns)
 
+    def change_col_alias(self, col_key, value):
+        previous_value = self.reverse_attribute_aliases.get(value, None)
+        if previous_value is not None:
+            del self.attribute_aliases[previous_value]
+            print(f'Removed alias {value} for {previous_value}')
+        self.attribute_aliases[col_key] = value
+        self.recalculate_reverse_aliases()
+
+    def recalculate_reverse_aliases(self):
+        self.reverse_attribute_aliases = dict((v, k) for k, v in self.attribute_aliases.items())
 
     def entity_instance_node(self, col : str | URIRef, entity):
         return self.namespace[f'{quote(uri_to_id(col))}_{quote(entity)}']
@@ -259,7 +272,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
 
         for col in log:
             print(f'{col}, {log.dtypes[col]} : {log[col].unique()[0:10]}') # TODO: make nice UI
-            col_key = self.attribute_aliases.get(col, col)
+            col_key = self.get_col_key(col)
             if col_key not in self.ignore_columns:
 
                 is_entity_column, is_value_column = self.determine_col_type(col_key, log[col])
@@ -291,12 +304,15 @@ class SimpleEventLogImporter(KnowledgeImporter):
                     self.add((value_node, BPO.dataType , type_hint))
                     print(f'=> Value column of type {type_hint}')
 
+    def get_col_key(self, col):
+        return self.attribute_aliases.get(col, col)
 
     def determine_col_type(self, col_key : str | Keys, col_data):
         is_entity_column = False
         is_value_column = False
-
-        if col_key in self.entity_columns:
+        if col_key in self.ignore_columns:
+            return False, False
+        elif col_key in self.entity_columns:
             is_entity_column = True
         elif col_key in self.value_columns:
             is_value_column = True
@@ -765,7 +781,7 @@ class ImporterJupyterUI2(ImporterUI):
     @staticmethod
     @reacton.component
     def validation_view(importer, callback_done):
-        with w.VBox() as main:
+        with w.VBox(layout = ipywidgets.Layout(width='100%', height='98%')) as main:
             editing, set_editing = reacton.use_state(False)
             if not editing:
                 with w.HBox():
