@@ -1,0 +1,65 @@
+# A subset of (condec)DECLARE formalized in ontology and rules
+@prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
+@base <http://infs.cit.tum.de/karibdis/baseontology/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://infs.cit.tum.de/karibdis/rules/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix declare: <http://infs.cit.tum.de/karibdis/declare/> .
+
+
+declare:init rdf:type owl:ObjectProperty;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "The first activity for this process.".
+
+declare:InitRule a sh:NodeShape ;
+    sh:targetClass :Case ;
+	sh:rule [
+        a sh:SPARQLRule ;
+		sh:prefixes : ;
+		sh:construct """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+			CONSTRUCT {
+				?tail :instanceOf ?init .
+			} WHERE { 
+                ?init declare:init ?init . # TODO: check that it's the only one - and make it process specific ...
+                ?tail :partOf $this .
+                FILTER NOT EXISTS {
+                    ?tail :instanceOf ?any.
+                }
+                FILTER NOT EXISTS {
+                    ?other :partOf $this .
+                    FILTER(?other != ?tail)
+                }
+            }
+        """ ;
+	] .
+
+
+declare:chainresponse rdf:type owl:ObjectProperty;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "If the subject activity occurs, the object activity must occur next.".
+
+declare:ChainResponseRule a sh:NodeShape ;
+    sh:targetClass :Case ;
+	sh:rule [
+        a sh:SPARQLRule ;
+		sh:prefixes ex: ;
+		sh:construct """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+			CONSTRUCT {
+				?tail :instanceOf ?b .
+			} WHERE { 
+                ?tail :partOf $this .
+                 FILTER NOT EXISTS {
+                    ?tail :instanceOf ?any.
+                }
+				BIND (ex:lastCompleted($this) AS ?last) .
+                ?last :instanceOf ?a.
+                ?a declare:chainresponse ?b.
+            }
+        """ ;
+	] .

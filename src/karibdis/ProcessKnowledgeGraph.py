@@ -9,12 +9,9 @@ class ProcessKnowledgeGraph(Graph):
     
     def __init__(self):
         super().__init__()
-
-        with importlib.resources.open_text('karibdis', 'base_ontology.ttl') as file:
-            self.parse(file=file)
-
-        with importlib.resources.open_text('karibdis', 'base_rules.ttl') as file:
-            self.parse(file=file)
+        self.parse(importlib.resources.path('karibdis', 'base_ontology.ttl'), format='turtle')
+        self.parse(importlib.resources.path('karibdis', 'base_rules.ttl'), format='turtle')
+        self.parse(importlib.resources.path('karibdis', 'declare_ontology.ttl'), format='turtle')
 
 
     def unassigned_tasks(self):

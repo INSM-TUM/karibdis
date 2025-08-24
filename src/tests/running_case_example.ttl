@@ -1,0 +1,92 @@
+@prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
+@prefix log: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+log:Task_B_1 a :Task ;
+    log:org%3Agroup log:org%3Agroup_A ;
+    :completedAt "2014-12-21T11:04:24+00:00"^^xsd:dateTime ;
+    :directlyFollowedBy log:Task_B_2 ;
+    :instanceOf log:Activity_ER%20Registration ;
+    :partOf log:Case_B .
+
+log:Activity_CRP a :Activity .
+
+log:Activity_ER%20Triage a :Activity .
+
+log:Activity_LacticAcid a :Activity .
+
+log:Activity_Leucocytes a :Activity .
+
+log:Diagnose_B a log:type_Diagnose .
+
+log:Task_B_2 a :Task ;
+    log:org%3Agroup log:org%3Agroup_A ;
+    :completedAt "2014-12-21T11:04:24+00:00"^^xsd:dateTime ;
+    :directlyFollowedBy log:Task_B_3 ;
+    :instanceOf log:Activity_ER%20Registration ;
+    :partOf log:Case_B .
+
+log:Task_B_3 a :Task ;
+    log:org%3Agroup log:org%3Agroup_C ;
+    :completedAt "2014-12-21T11:17:19+00:00"^^xsd:dateTime ;
+    :directlyFollowedBy log:Task_B_4 ;
+    :instanceOf log:Activity_ER%20Triage ;
+    :partOf log:Case_B .
+
+log:Task_B_4 a :Task ;
+    log:CRP 2.4e+02 ;
+    log:org%3Agroup log:org%3Agroup_B ;
+    :completedAt "2014-12-21T11:36:00+00:00"^^xsd:dateTime ;
+    :directlyFollowedBy log:Task_B_5 ;
+    :instanceOf log:Activity_CRP ;
+    :partOf log:Case_B .
+
+log:Task_B_5 a :Task ;
+    log:LacticAcid 8e-01 ;
+    log:org%3Agroup log:org%3Agroup_B ;
+    :completedAt "2014-12-21T11:36:00+00:00"^^xsd:dateTime ;
+    :directlyFollowedBy log:Task_B_6 ;
+    :instanceOf log:Activity_LacticAcid ;
+    :partOf log:Case_B .
+
+log:Task_B_6 a :Task ;
+    log:Leucocytes 1.38e+01 ;
+    log:org%3Agroup log:org%3Agroup_B ;
+    :completedAt "2014-12-21T11:36:00+00:00"^^xsd:dateTime ;
+    :instanceOf log:Activity_Leucocytes ;
+    :partOf log:Case_B .
+
+log:org%3Agroup_C a log:type_org%3Agroup .
+
+log:Activity_ER%20Registration a :Activity .
+
+log:org%3Agroup_A a log:type_org%3Agroup .
+
+log:org%3Agroup_B a log:type_org%3Agroup .
+
+log:Case_B a :Case ;
+    log:Age 4.5e+01 ;
+    log:Diagnose log:Diagnose_B ;
+    log:DiagnosticArtAstrup false ;
+    log:DiagnosticBlood true ;
+    log:DiagnosticECG true ;
+    log:DiagnosticIC true ;
+    log:DiagnosticLacticAcid true ;
+    log:DiagnosticLiquor false ;
+    log:DiagnosticOther false ;
+    log:DiagnosticSputum true ;
+    log:DiagnosticUrinaryCulture true ;
+    log:DiagnosticUrinarySediment true ;
+    log:DiagnosticXthorax true ;
+    log:DisfuncOrg false ;
+    log:Hypotensie false ;
+    log:Hypoxie false ;
+    log:InfectionSuspected true ;
+    log:Infusion true ;
+    log:Oligurie false ;
+    log:SIRSCritHeartRate true ;
+    log:SIRSCritLeucos false ;
+    log:SIRSCritTachypnea true ;
+    log:SIRSCritTemperature true ;
+    log:SIRSCriteria2OrMore true .
+

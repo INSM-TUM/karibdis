@@ -29,6 +29,7 @@ ex:ExtendStaleCasesRule a sh:NodeShape ;
         """ ;
 	] .
 
+
 ex:nexttask
     a sh:SPARQLFunction ;
     sh:parameter [
@@ -40,5 +41,25 @@ ex:nexttask
     sh:select """
         SELECT (URI(CONCAT(STRBEFORE(str(?op1), "Case_"), "Task_", STRAFTER(str(?op1), "Case_"), "_", STR(COUNT(?c) + 1))) AS ?result)
         WHERE {
-            ?c :partOf ?op1.
-    }""".
+            OPTIONAL {?c :partOf ?op1. }
+        }
+    """.
+
+
+ex:lastCompleted
+    a sh:SPARQLFunction ;
+    sh:parameter [
+        sh:path ex:op1 ;
+        sh:datatype :Case ;
+        sh:description "The case" ;
+    ] ;
+    sh:returnType :Task ;
+    sh:select """
+        SELECT (SAMPLE(?task) as ?result) # Note: SAMPLE is a fix for pySHACL error when returning and binding empty list; might not be compliant to SPARQL standard 
+        WHERE {
+            ?task :partOf ?op1.
+            ?task :completedAt ?completedAt .
+        }
+        ORDER BY DESC(?completedAt)
+        LIMIT 1
+    """.
