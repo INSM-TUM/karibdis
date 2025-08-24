@@ -65,6 +65,12 @@ def diff_def(namespace, ontology_file):
 if not is_properly_defined(BASE_PROCESS_ONTOLOGY, BASE_ONTOLOGY_FILE):
      print(f'BASE_PROCESS_ONTOLOGY is not properly defined. Please check the ontology file. \nDiff: {diff_def(BASE_PROCESS_ONTOLOGY, BASE_ONTOLOGY_FILE)}', file=sys.stderr)
 
+
+
+LLM_CACHE_FOLDER = './llm_cache'
+
+
+
 def uri_to_id(uri):
     return unquote(uri.split('/')[-1]) # TODO this assumes a specific id translation; replace
 
@@ -183,17 +189,21 @@ def textualize_graph(graph, annotation_properties=None, filter_func=None):
 
 # def graph_alignment(addition_graph, target_graph, addition_node_filter=None, target_node_filter=None, addition_text_params={}, target_text_params={}):
 def graph_alignment(addition_texts, target_texts):
+    
+    if len(addition_texts) == 0 or len(target_texts) == 0: # Necessary guard, as unpacking zip of empty dict throws error (x,y = list(zip(*dict().items())))
+        return {}
+    
     source_ids, source_texts_list = zip(*addition_texts.items())
     target_ids, target_texts_list = zip(*target_texts.items())
 
     # Fast BiEncoder Pre-ranking
-    bi_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+    bi_encoder = SentenceTransformer("all-MiniLM-L6-v2", cache_folder=LLM_CACHE_FOLDER)
     target_embeddings = bi_encoder.encode(target_texts_list, convert_to_tensor=True)
     source_embeddings = bi_encoder.encode(source_texts_list, convert_to_tensor=True)
     cosine_scores = util.cos_sim(source_embeddings, target_embeddings)
 
     # High-quality CrossEncoder re-ranking
-    cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", cache_folder=LLM_CACHE_FOLDER)
     def top_k_nodes(i, top_k=10, top_k_outer=20):
         source_id = source_ids[i]
         top_scores, top_indices = cosine_scores[i].topk(min(len(cosine_scores[i]), top_k_outer), sorted=True)

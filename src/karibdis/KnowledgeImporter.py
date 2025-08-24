@@ -110,7 +110,9 @@ class KnowledgeImporter(ABC):
         # - nodes that are already in the graph, to avoid matchings like :Resource -> :Resource
 
         print('Textualizing graphs for alignment...')
-        addition_texts = textualize_graph(self.addition_graph, graph_annotations_properties(self.addition_graph, **addition_text_params), filter_func=addition_node_filter)
+        existing_nodes = set(self.pkg.all_nodes())
+        _addition_node_filter = lambda term: (term not in existing_nodes) and ((addition_node_filter is None) or addition_node_filter(term))
+        addition_texts = textualize_graph(self.addition_graph, graph_annotations_properties(self.addition_graph, **addition_text_params), filter_func=_addition_node_filter)
         target_texts = textualize_graph(self.pkg, graph_annotations_properties(self.pkg, **target_text_params), filter_func=target_node_filter)
         print('Calculating basic alignment...')
         alignment = graph_alignment(addition_texts, target_texts)
@@ -303,6 +305,20 @@ class SimpleEventLogImporter(KnowledgeImporter):
                     type_hint = self.infer_value_col_type(log[col])
                     self.add((value_node, BPO.dataType , type_hint))
                     print(f'=> Value column of type {type_hint}')
+
+    def import_declare(self, declare):
+        declare_map = {
+            'init' : URIRef('http://infs.cit.tum.de/karibdis/declare/init'), # TODO put in namespace once existing 
+            'chainresponse' : URIRef('http://infs.cit.tum.de/karibdis/declare/chainresponse'), 
+            # 'exactly_one'
+        }
+
+        for relation, discovered in declare.items():
+            for relations, confidence_support in discovered.items():
+                is_unary = type(relations) == str
+                if is_unary:
+                    relations = (relations, relations)
+                self.add((self.activity_node(relations[0]), declare_map[relation], self.activity_node(relations[1])))
 
     def get_col_key(self, col):
         return self.attribute_aliases.get(col, col)
@@ -790,7 +806,7 @@ class ImporterJupyterUI2(ImporterUI):
                     # w.Button(description='Cancel')
                 if len(importer.addition_graph) == 0:
                     w.Label(value='No data to visualize.')
-                elif len(importer.addition_graph.all_nodes()) > 100:
+                elif len(importer.addition_graph.all_nodes()) > 600:
                     w.Label(value=f'Too many nodes ({len(importer.addition_graph.all_nodes())}) to visualize.')
                 else:
                     graph = ImporterJupyterUI2.visualize_addition_graph(importer)
