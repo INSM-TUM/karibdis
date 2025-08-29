@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 import numbers
 
-from rdflib import Graph, Literal, RDF, RDFS, OWL, XSD, URIRef, Namespace
+from rdflib import Graph, Literal, RDF, RDFS, OWL, XSD, SH, URIRef, Namespace
 from urllib.parse import quote, unquote
 from karibdis.utils import *
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
@@ -12,12 +12,17 @@ import pandas as pd
 from pandas.api.types import is_string_dtype, is_numeric_dtype, is_datetime64_any_dtype
 import datetime
 
+import textwrap
+import json 
+import uuid
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 
 from itertools import zip_longest
+
+import logging
 
 
 
@@ -213,7 +218,7 @@ Please output only True or False, whether the entities represented are related.'
 
 
     ### ===== Util =====    
-    def log(self, message):
+    def log(self, message, level=logging.INFO):
         print(message)
 
     def serialize(self, **args):
@@ -561,6 +566,79 @@ For generating the nodes and edges, please consider the following contextual sch
         ).content
         self.log(response)
         self.addition_graph.parse(data=f'{namespace_string(self.pkg)}\n\n{unwrap_markdown_code(response)}', format='turtle')
+
+    def import_rules_from_statement(self, rule : str):
+
+        prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+'''You are a knowledge importer for a knowledge-graph-based business process management system.
+Your inputs is a text of process knowledge and you have the textualization of an existing knowledge graph as context. 
+Your task is to output rules on the graph that represent the knowledge of the text.
+Formulate your rules as SPARQL SELECT queries, so that whenever a rule is violated, the result set of the respective query is non-empty and vice versa. 
+Every query should include the variable "?case", which relates to one specific process instance.
+Please only return json code that maps every rule text to the respective query and nothing else. Don't output any notes or justifications.
+
+For generating the rules, please consider the following contextual schema information in OWL-RDF format and key entities in RDF format. 
+
+{context}''',
+                ),
+                ("human", "{rule}"),
+            ]
+        )
+            
+        prompt_context = self.pkg.serialize(format='ttl')
+
+        chain = prompt | self.llm
+
+        response = chain.invoke(
+            {
+                "context": prompt_context,
+                "rule": rule,
+            }
+        ).content
+
+        base_id = quote(str(uuid.uuid4()))
+
+        result_shacl = namespace_string(self.pkg)
+        
+        parsed_response = dict()
+        try:
+            parsed_response = json.loads(unwrap_markdown_code(response))
+        except json.JSONDecodeError as e:
+            self.log(str(e), logging.ERROR)
+
+        results = []
+        
+        for id, rule in enumerate(parsed_response.keys()):
+            query = parsed_response[rule]
+            rule_id = f'{base_id}_{id}'
+            message = rule
+        
+            
+            result_shacl += f'''
+ex:{rule_id} a sh:NodeShape ;
+    sh:targetClass :Case ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "{message}" ;
+        sh:select """
+            {textwrap.indent(query, '    ' * 2)}
+        """ ;
+    ] .
+
+'''
+        self.addition_graph.parse(data=result_shacl)
+
+    def get_query_triples(self):
+        return list(self.addition_graph.triples((None, SH.select, None)))
+
+    def update_query_formatting(self, triples, new_formats):
+        for triple, formatted in zip(triples, new_formats):
+            s,p,o = triple
+            self.addition_graph.remove(triple)
+            self.addition_graph.add((s, p, Literal(formatted))) 
 
 
 class ExistingOntologyImporter(KnowledgeImporter):

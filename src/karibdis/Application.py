@@ -1,12 +1,15 @@
 from abc import ABC, abstractmethod
 import ipywidgets
-from IPython.display import display, clear_output
+from IPython.display import display, clear_output, Javascript
+
+import uuid
 
 import reacton
 import reacton.ipywidgets as w
 import reacton.ipyvuetify as v
 
 import pm4py
+import json
 
 from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
 from karibdis.utils import *
@@ -106,9 +109,7 @@ def ActiveImportUI(source, set_source, pkg):
         set_source(None)
         
     def complete():
-        set_processing(True)
-        importer.load()
-        set_processing(False)
+        be_busy_with(importer.load)
         print('Data successfully loaded into the knowledge graph.') # TODO Maybe send nice alert to user
         terminate()
         
@@ -150,10 +151,7 @@ def ActiveImportUI(source, set_source, pkg):
                     print('Constructed Importer')
 
                 elif source == TEXT:
-                    text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test') #TODO
-                    w.Textarea(value=text, on_value=set_text, rows=10, layout = ipywidgets.Layout(width='98%'))
-                    w.Button(description="Confirm", on_click=lambda: run_extraction(lambda: importer.import_content_from_statement(text)))
-                    # w.Button(description="Continue to alignment", on_click=) TODO allow import of multiple statements
+                    TextExtractionUI(importer, set_subtitle, be_busy_with, run_extraction)
                 
                 elif source == EVENT_LOG:
                     EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction)
@@ -179,12 +177,45 @@ def ActiveImportUI(source, set_source, pkg):
                         )
     
         elif stage == ALIGN:
-            AlignmentUI(importer, set_stage, set_processing)
+            AlignmentUI(importer, set_stage, be_busy_with)
                 
         elif stage == VALIDATE:
             ImporterJupyterUI2.validation_view(importer, complete)
         
     w.Button(description="Cancel Knowledge Import", on_click=cancel)
+
+@reacton.component
+def TextExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
+    text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test')
+    rulesloading, set_rulesloading = reacton.use_state(False)
+
+    def import_rules(): # TODO add busy-ness
+        importer.import_rules_from_statement(text)
+        set_rulesloading(True)    
+
+    w.Textarea(value=text, on_value=set_text, rows=10, layout = ipywidgets.Layout(width='98%'))
+    with w.HBox():
+        w.Button(description="Load Entities", on_click=lambda: run_extraction(lambda: importer.import_content_from_statement(text)))
+        w.Button(description="Load Rules", on_click=import_rules)
+    # w.Button(description="Continue to alignment", on_click=) TODO allow import of multiple statements
+
+        
+    if rulesloading:
+        output = ipywidgets.Output()
+        display(output)
+
+        def run():
+            triples = importer.get_query_triples()
+            queries = list(map(lambda triple: triple[2].toPython(), triples))
+
+            def update_format(res):
+                if not str(res).startswith('ERROR'):
+                    importer.update_query_formatting(triples, res)
+                run_extraction(lambda: None) # continue to alignment stage
+                
+            format_query(queries, update_format, output)  
+        
+        run()
 
 @reacton.component
 def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
@@ -330,20 +361,16 @@ def DiscoveryUI(importer, log, run_extraction):
         w.Button(description="Load Constraints", on_click=lambda: run_extraction(lambda: importer.import_declare(declare)))  
 
 @reacton.component
-def AlignmentUI(importer, set_stage, set_processing):
-    alignment, set_alignment = reacton.use_state(None)
+def AlignmentUI(importer, set_stage, be_busy_with):
+    alignment, set_alignment = reacton.use_state([])
 
     def apply_alignment(accepted_alignment):
         importer.apply_alignment(accepted_alignment)
         set_stage(VALIDATE)
-    
-    if alignment is None or alignment == '':
-        # TODO allow user to customize filters
-        set_processing(True)
-        set_alignment(importer.determine_alignment())
-        set_processing(False)
-    else:
+    with w.VBox() as main:
         ImporterJupyterUI2.alignment_view(importer, alignment, apply_alignment)
+        w.Button(description="Automated Alignment", on_click=lambda: be_busy_with(lambda: set_alignment(importer.determine_alignment())))  
+    return main
 
 
 @reacton.component
@@ -357,3 +384,84 @@ def PrescriptionAndTaskUI():
             display(graph)
             clear_output()
     return main
+
+
+
+
+# =========================== UTILS ===========================
+
+# Attention: Veeeeery hacky
+def format_query(queries, callback, output=None):
+#    try:
+#        async with async_timeout.timeout(2):
+            
+            bridge = ipywidgets.Textarea()
+            classname = 'x' + str(uuid.uuid4()).replace('-', '')
+            bridge.add_class(classname)
+            
+            js = Javascript("""
+            // https://stackoverflow.com/a/61511955
+            function waitForElm(selector) {
+                return new Promise(resolve => {
+                    if (document.querySelector(selector)) {
+                        return resolve(document.querySelector(selector));
+                    }
+            
+                    const observer = new MutationObserver(mutations => {
+                        if (document.querySelector(selector)) {
+                            observer.disconnect();
+                            resolve(document.querySelector(selector));
+                        }
+                    });
+            
+                    // If you get "parameter 1 is not of type 'Node'" error, see https://stackoverflow.com/a/77855838/492336
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                });
+            }
+            
+            
+            (async () => {
+                if (!window.spfmt) {
+                    await import("https://cdn.jsdelivr.net/gh/sparqling/sparql-formatter@v1.0.2/dist/spfmt.js");
+                }
+                console.log(window.spfmt)
+                const queries = """+ json.dumps(queries) +""";
+                console.log(queries)
+                let formatted = [];
+                try {
+                    formatted = queries.map(x => window.spfmt.format(x));
+                    console.log("Formatted queries:\\n", formatted);
+                } catch(e) {
+                    formatted = 'ERROR: ' + e;
+                }
+                const elm = await waitForElm('."""+classname+"""');
+                const input = elm.getElementsByClassName('widget-input')[0]
+                input.value = JSON.stringify(formatted);
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            })();
+            """)
+
+            
+            if output is not None:
+                with output:
+                    display(ipywidgets.Label('foo2'))
+                    display(js)
+                    display(ipywidgets.Label('foo3'))
+                    display(bridge)
+            else:
+                display(bridge, js)
+            
+            def handle_value(x):
+                value = x['new']
+                bridge.close()
+                #future.set_result(json.loads(value))
+                callback(json.loads(value))
+                if output is not None:
+                    output.clear_output()
+            
+            bridge.observe(handle_value, 'value')
+#    except asyncio.TimeoutError:
+#        return query
