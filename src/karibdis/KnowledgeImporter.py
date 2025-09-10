@@ -295,7 +295,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
                         self.log(f'Added type owl class for {col}: {clazz}')
 
                     for entity in values:
-                        entity_node = self.entity_instance_node(col, entity)
+                        entity_node = self.entity_instance_node(col_key, entity)
                         self.add((entity_node, RDF.type, clazz))
                         self.add((entity_node, RDFS.label, Literal(entity)))
 
@@ -755,7 +755,7 @@ class ImporterJupyterUI(ImporterUI):
 
     
     def visualize_addition_graph(self): 
-        draw_graph(self.importer.addition_graph, color_func=lambda _: dict(zip_longest(self.importer.addition_graph.all_nodes() - self.importer.pkg.all_nodes(), [], fillvalue='#99AA00')))
+        return draw_graph(self.importer.addition_graph, color_func=lambda _: dict(zip_longest(self.importer.addition_graph.all_nodes() - self.importer.pkg.all_nodes(), [], fillvalue='#99AA00')))
 
     def show_edit(self, b=None):
         init_value = self.importer.addition_graph.serialize(format='ttl')

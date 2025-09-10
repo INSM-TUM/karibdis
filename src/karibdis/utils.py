@@ -8,7 +8,7 @@ import importlib.resources
 from sentence_transformers import CrossEncoder, SentenceTransformer, util
 
 BASE_URL = 'http://infs.cit.tum.de/karibdis/'
-BASE_ONTOLOGY_FILE = importlib.resources.path('karibdis', 'base_ontology.ttl')
+BASE_ONTOLOGY_FILE = importlib.resources.files('karibdis').joinpath('base_ontology.ttl')
 
 class BASE_PROCESS_ONTOLOGY(DefinedNamespace):
 

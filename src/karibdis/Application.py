@@ -350,7 +350,7 @@ def DiscoveryUI(importer, log, run_extraction):
         w.Button(description="Discover", on_click=discover)
     else:
         for relation in allowed_templates:
-            x = declare[relation]
+            x = declare.get(relation, dict())
             v.ToolbarTitle(children=relation)
             for relations, data in x.items():
                 with v.ListItem() as main:

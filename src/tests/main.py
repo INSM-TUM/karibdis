@@ -31,7 +31,7 @@ class TestDefaultDeductions(unittest.TestCase):
 
     def testOpenStaleCaseExtended(self):
         test_graph = ProcessKnowledgeGraph()
-        test_graph.parse(importlib.resources.path('tests', 'running_case_example.ttl'), format='turtle')
+        test_graph.parse(importlib.resources.files('tests').joinpath('running_case_example.ttl'), format='turtle')
 
         new = self.get_deduced_triples(test_graph)
 
@@ -42,7 +42,7 @@ class TestDefaultDeductions(unittest.TestCase):
 
     def testClosedCaseNotExtended(self):
         test_graph = ProcessKnowledgeGraph()
-        test_graph.parse(importlib.resources.path('tests', 'running_case_example.ttl'), format='turtle')
+        test_graph.parse(importlib.resources.files('tests').joinpath('running_case_example.ttl'), format='turtle')
         test_graph.add((URIRef('http://example.org/Case_B'), BPO.isClosed, Literal(True)))
         
         new = self.get_deduced_triples(test_graph)
@@ -51,7 +51,7 @@ class TestDefaultDeductions(unittest.TestCase):
 
     def testDeclareInit(self):
         test_graph = ProcessKnowledgeGraph()
-        test_graph.parse(importlib.resources.path('tests', 'running_case_example.ttl'), format='turtle')
+        test_graph.parse(importlib.resources.files('tests').joinpath('running_case_example.ttl'), format='turtle')
         
         new_case = URIRef('http://example.org/Case_A')
         test_graph.add((new_case, RDF.type, BPO.Case))
@@ -64,7 +64,7 @@ class TestDefaultDeductions(unittest.TestCase):
     
     def testDeclareChainResponse(self):
         test_graph = ProcessKnowledgeGraph()
-        test_graph.parse(importlib.resources.path('tests', 'running_case_example.ttl'), format='turtle')
+        test_graph.parse(importlib.resources.files('tests').joinpath('running_case_example.ttl'), format='turtle')
         
         new_case = URIRef('http://example.org/Case_A')
         test_graph.add((new_case, RDF.type, BPO.Case))

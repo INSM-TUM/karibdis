@@ -1,7 +1,16 @@
 jupyterlab
+jupyter-ui-poll
 rdflib
 pyshacl
 pandas
 networkx 
 matplotlib
 yfiles_jupyter_graphs
+voila
+reacton
+ipyvue
+ipyvuetify
+sentence_transformers
+langchain_openai
+dotenv
+pm4py
