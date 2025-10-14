@@ -1,0 +1,22 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX sepon: <http://www.semanticweb.org/zchero/ontologies/2023/11/SepsisOntology#>
+
+SELECT ?subject ?predicate ?object WHERE {
+  {
+    SELECT DISTINCT ?node WHERE {
+        ?node rdf:type* / rdfs:subClassOf* sepon:Diagnostic_Biomarker .
+    }
+  }
+
+  # Edges either going out from or coming into ?node
+  {
+    ?node ?predicate ?object .
+    BIND(?node AS ?subject)
+  }
+  UNION
+  {
+    ?subject ?predicate ?node .
+    BIND(?node AS ?object)
+  }
+}

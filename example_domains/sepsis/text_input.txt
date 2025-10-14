@@ -1,0 +1,4 @@
+The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test. 
+The process value Lactic Acid measures the amount of lactic acid in a blood test. 
+The process value Leucocytes represents the number of white blood cells in a blood test. 
+The process value Hypoxie defines whether hypoxia has been detected for the patient. 

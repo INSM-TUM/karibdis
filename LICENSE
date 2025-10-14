@@ -19,3 +19,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+The following files shipped with this repository are retrieved from outside sources and are subject to different licensing:
+- ./example_domains/sepsis/sepon.ttl retrieved and translated from https://bioportal.bioontology.org/ontologies/SEPON, freely available for public use as of the Bioportal terms of use, state of 19.12.2024 (https://www.bioontology.org/terms) 
