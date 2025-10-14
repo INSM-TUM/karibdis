@@ -1,0 +1,45 @@
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix log: <http://example.org/> . 
+
+:ReleaseWithoutTreatment a :Activity ;
+    rdfs:label "Release without Treatment" .
+
+
+
+:SIRSCriteria2OrMoreRule a sh:NodeShape ;
+    sh:targetClass :Case ;
+	sh:rule [
+        a sh:SPARQLRule ;
+		sh:construct """
+			CONSTRUCT {
+				?this log:SIRSCriteria2OrMore ?two_or_more.
+			} WHERE {
+                ?this log:SIRSCritLeucos ?leucos .
+                ?this log:SIRSCritTachypnea ?tachypnea .
+                ?this log:SIRSCritHeartRate ?heartrate .
+                ?this log:SIRSCritTemperature ?temperature .
+                BIND(IF(?leucos = true, 1, 0) + IF(?tachypnea = true, 1, 0) + IF(?heartrate = true, 1, 0) + IF(?temperature = true, 1, 0) AS ?sirs_count) .
+                BIND(?sirs_count >= 2 AS ?two_or_more)
+            }
+        """ ;
+	] .
+
+
+:ReleaseNonSIRS a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Patient with less than two SIRS criteria should be discharged." ;
+        sh:select """
+            SELECT  $this (2 AS ?value)
+            WHERE {
+                $this :instanceOf__hypothetical :ReleaseWithoutTreatment .
+                $this :partOf / log:SIRSCriteria2OrMore false . 
+            }
+        """ ;
+    ] .
