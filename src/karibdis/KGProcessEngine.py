@@ -142,6 +142,23 @@ class KGProcessEngine:
                     return None
         else:
             return None
+        
+    def open_tasks(self):
+        open_tasks_query = """
+            PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+            SELECT ?task ?case
+            WHERE {
+                ?case a :Case .
+                ?task :partOf ?case .
+                ?task :instanceOf ?any .
+                FILTER NOT EXISTS { ?task :completedAt ?time }
+                FILTER NOT EXISTS { ?case :isClosed true}
+            }"""
+
+        open_tasks = self.pkg.query(open_tasks_query)
+        for task, case in open_tasks:
+            yield (task, case)
     
 
 class Decision:

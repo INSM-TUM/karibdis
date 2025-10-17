@@ -17,6 +17,9 @@ from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
 from karibdis.utils import *
 from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
 from karibdis.KnowledgeImporter import TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter, ImporterJupyterUI2
+import datetime
+from rdflib import Literal, RDFS, XSD
+from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
 
 
 class Application(ABC):
@@ -489,7 +492,94 @@ def GraphExplorationUI(graph):
     return main
 
 
+@reacton.component
+def TaskSelectionUI(system):
+    attribute_values, set_attribute_values = reacton.use_state({})
+    with w.VBox() as main:
+        w.Label(value="Task Selection UI")
+        engine = system.engine
+        pkg = system.pkg
+        tasks, set_tasks = reacton.use_state(list(engine.open_tasks()))
 
+        def reload():
+            set_tasks(list(engine.open_tasks()))
+            set_attribute_values({})  # Reset form fields
+                
+        with w.VBox():
+            if len(tasks) > 0:
+                TaskExecutionUI(tasks, pkg, reload, attribute_values, set_attribute_values)
+            else: 
+                w.Label(value="No open tasks.")
+            w.Button(description="Reload Tasks", on_click=lambda *args: reload())
+            
+    return main
+
+@reacton.component
+def TaskExecutionUI(tasks, pkg, reload, attribute_values, set_attribute_values):
+    current_task, set_current_task = reacton.use_state(tasks[0][0])
+    current_case, set_current_case = reacton.use_state(tasks[0][1])
+    reacton.use_effect(lambda: set_current_task(tasks[0][0]), [tasks])
+    reacton.use_effect(lambda: set_current_case(tasks[0][1]), [tasks])
+    
+    submit_clicked, set_submit_clicked = reacton.use_state(False)
+    
+    with w.HBox() as main:
+        
+        def on_submit_click(*args):
+            for attr in attribute_values:
+                attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
+                # Convert the value to the appropriate type based on attr_type  
+                if attr_type == XSD.integer:
+                    value = int(attribute_values[attr])
+                elif attr_type == XSD.float:
+                    value = float(attribute_values[attr])
+                elif attr_type == XSD.boolean:
+                    value = bool(attribute_values[attr])
+                else:
+                    value = str(attribute_values[attr])
+
+                pkg.set((current_task, BPO.completedAt, Literal(datetime.datetime.now())))
+                pkg.set((current_case, attr, Literal(value)))
+                reload()
+            set_submit_clicked(True)
+
+        
+        
+        
+        with w.VBox():
+            for task, case in tasks:
+                w.Button(description=f"Task: {pkg.namespace_manager.curie(task)} - Case: {pkg.namespace_manager.curie(case)}", on_click=lambda t=task, c=case: (set_current_task(t), set_current_case(c)), style=w.ButtonStyle(button_color='#DDEEFF' if task == current_task else None))
+            
+        activity = next(pkg.objects(predicate = BPO.instanceOf, subject = current_task), None)
+        attributes = list(pkg.objects(subject=activity, predicate=BPO.writesValue))
+        layout= w.Layout(description_width="initial")
+        
+        def on_widget_change(attr, widget):
+            def handler(new_value):
+                set_attribute_values({**attribute_values, attr: new_value})
+            return handler
+        
+        with w.VBox():  
+            w.Label(value=f"Task Execution UI")
+            w.Label(value= f"Selected Task: {pkg.namespace_manager.curie(activity)} - {pkg.namespace_manager.curie(current_task)} ")
+            for attr in attributes:
+                attr_name = next(pkg.objects(predicate=RDFS.label, subject=attr), uri_to_id(attr))
+                attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
+                if attr_type is None or attr_type == XSD.string:
+                    widget = w.Text(value=attribute_values[attr] if attr in attribute_values else "", layout=layout, on_value=on_widget_change(attr, main))
+                elif attr_type == XSD.integer:
+                    widget = w.IntText(value=attribute_values[attr] if attr in attribute_values else 0, layout=layout, on_value=on_widget_change(attr, main))
+                elif attr_type == XSD.float:
+                    widget = w.FloatText(value=attribute_values[attr] if attr in attribute_values else 0.0, layout=layout, on_value=on_widget_change(attr, main))
+                elif attr_type == XSD.boolean:
+                    widget = w.Checkbox(value=attribute_values[attr] if attr in attribute_values else False, on_value=on_widget_change(attr, main))
+                else:
+                    widget = w.Text(value=attribute_values[attr] if attr in attribute_values else "", layout=layout, on_value=on_widget_change(attr, main))
+                w.VBox(children=[w.Label(value=attr_name), widget])
+            w.Button(description="Submit", on_click=on_submit_click)
+            if submit_clicked: w.Label(value="Values submitted and processed!")
+                
+    return main
 
 # =========================== UTILS ===========================
 

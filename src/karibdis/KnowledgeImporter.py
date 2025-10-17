@@ -278,7 +278,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
         activity_col = self.reverse_attribute_aliases.get(BPO.Activity) # Must exist
 
         for col in log:
-            print(f'{col}, {log.dtypes[col]} : {log[col].unique()[0:10]}') # TODO: make nice UI
+            print(f'{col}, {log.dtypes.dropna()[col]} : {log[col].dropna().unique()[0:10]}') # TODO: make nice UI
             col_key = self.get_col_key(col)
             if col_key not in self.ignore_columns:
 
@@ -343,7 +343,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
             is_value_column = True
         elif is_numeric_dtype(col_data) or is_datetime64_any_dtype(col_data):
             is_value_column = True
-        elif set([True, False]).issubset(col_data.unique()):
+        elif set([True, False]).issubset(set(col_data.dropna().unique())):
             is_value_column = True
         else:
             is_entity_column = True
@@ -365,7 +365,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
             return XSD.float
         elif is_datetime64_any_dtype(col):
             return XSD.dateTimeStamp
-        elif set([True, False]).issubset(col.unique()):
+        elif set([True, False]).issubset(set(col.dropna().unique())):
             return XSD.boolean
         else:
             return Literal(col.value_counts(dropna=True).index[0]).datatype # Get most common value inferred datatype
