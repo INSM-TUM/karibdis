@@ -525,24 +525,51 @@ def TaskExecutionUI(tasks, pkg, reload, attribute_values, set_attribute_values):
     submit_clicked, set_submit_clicked = reacton.use_state(False)
     
     with w.HBox() as main:
+        activity = next(pkg.objects(predicate = BPO.instanceOf, subject = current_task), None)
+        attributes = list(pkg.objects(subject=activity, predicate=BPO.writesValue))
         
         def on_submit_click(*args):
-            for attr in attribute_values:
+            # iterate over all expected attributes (use compute_default_for when missing)
+            for attr in attributes:
                 attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
-                # Convert the value to the appropriate type based on attr_type
-                if attr_type not in XSD:
-                    value = pkg.namespace_manager.expand_curie(attribute_values[attr]) 
-                    
-                if attr_type == XSD.integer:
-                    value = int(attribute_values[attr]) if attribute_values[attr] is not None else 0
-                elif attr_type == XSD.float:
-                    value = float(attribute_values[attr]) if attribute_values[attr] is not None else 0.0
-                elif attr_type == XSD.boolean:
-                    value = bool(attribute_values[attr]) if attribute_values[attr] is not None else False
+
+                # safe read of state variable
+                current_vals = attribute_values if isinstance(attribute_values, dict) else dict(attribute_values or {})
+
+                # use stored value or compute a default now
+                val = current_vals.get(attr)
+                if val is None:
+                    val = compute_default_for(attr)
+                    # persist the default so UI and future submits see it
+                    try:
+                        set_attribute_values(lambda prev: {**(prev or {}), attr: val})
+                    except Exception:
+                        av = dict(attribute_values or {})
+                        av[attr] = val
+                        set_attribute_values(av)
+
+                
+                is_entity = attr_type is not None and not str(attr_type).startswith(str(XSD._NS))
+                if val is None and is_entity:
+                    missing_name = next(pkg.objects(predicate=RDFS.label, subject=attr), uri_to_id(attr))
+                    print(f"Cannot submit — missing entity value for: {missing_name}")
+                    return
+
+                if is_entity:
+                    # val is a curie string (from Dropdown) -> expand to URIRef
+                    obj = pkg.namespace_manager.expand_curie(val) if isinstance(val, str) else val
+                    pkg.set((current_case, attr, obj))
                 else:
-                    value = str(attribute_values[attr])
-                print(f'adding triple: {(current_case, attr, Literal(value))}')
-                pkg.set((current_case, attr, Literal(value)))
+                    if attr_type == XSD.integer:
+                        lit = Literal(val, datatype=XSD.integer)
+                    elif attr_type == XSD.float:
+                        lit = Literal(val, datatype=XSD.float)
+                    elif attr_type == XSD.boolean:
+                        lit = Literal(val, datatype=XSD.boolean)
+                    else:
+                        lit = Literal(val, datatype=attr_type if attr_type is not None else None)
+                    pkg.set((current_case, attr, lit))
+
             pkg.set((current_task, BPO.completedAt, Literal(datetime.datetime.now())))
             reload()
             set_submit_clicked(True)
@@ -553,42 +580,38 @@ def TaskExecutionUI(tasks, pkg, reload, attribute_values, set_attribute_values):
         with w.VBox():
             for task, case in tasks:
                 w.Button(description=f"Task: {pkg.namespace_manager.curie(task)} - Case: {pkg.namespace_manager.curie(case)}", on_click=lambda t=task, c=case: (set_current_task(t), set_current_case(c)), style=w.ButtonStyle(button_color='#DDEEFF' if task == current_task else None))
-            
-        activity = next(pkg.objects(predicate = BPO.instanceOf, subject = current_task), None)
-        attributes = list(pkg.objects(subject=activity, predicate=BPO.writesValue))
-
-        # initialize defaults when current_task/activity changes (merge, don't overwrite existing entries)
-        def _init_defaults():
-            defaults = {}
-            for attr in attributes:
-                if attr in attribute_values:
-                    continue
-                attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
-                if attr_type not in XSD:
-                    defaults[attr] = None
-                elif attr_type == XSD.integer:
-                    defaults[attr] = 0
-                elif attr_type == XSD.float:
-                    defaults[attr] = 0.0
-                elif attr_type == XSD.boolean:
-                    defaults[attr] = False
-                else:
-                    defaults[attr] = ""
-            if defaults:
-                set_attribute_values({**attribute_values, **defaults})
-
-        reacton.use_effect(_init_defaults, [current_task])
+        
+        def compute_default_for(attr):
+            # return a default value consistent with what _init_defaults would have set
+            attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
+            if attr_type not in XSD:
+                options = list(pkg.subjects(predicate=RDF.type, object=attr_type))
+                return pkg.namespace_manager.curie(options[0]) if options else None
+            if attr_type == XSD.integer:
+                return 0
+            if attr_type == XSD.float:
+                return 0.0
+            if attr_type == XSD.boolean:
+                return False
+            return ""
         
         layout= w.Layout(description_width="initial")
         
-        def on_widget_change(attr, widget):
+        def on_widget_change(attr, _):
             def handler(new_value):
-                set_attribute_values({**attribute_values, attr: new_value})
+               
+                try:
+                    
+                    set_attribute_values(lambda prev: {**(prev or {}), attr: new_value})
+                except TypeError:
+                    # fallback if functional updater not supported: build a safe local copy
+                    av = dict(attribute_values or {})
+                    av[attr] = new_value
+                    set_attribute_values(av)
             return handler
         
         with w.VBox():  
             w.Label(value= f"Selected Task: {pkg.namespace_manager.curie(activity)} - {pkg.namespace_manager.curie(current_task)} ")
-            # use a 3-column grid like EventLogExtractionUI
             grid = w.Layout(grid_template_columns='1fr 1fr 1fr', grid_gap='8px')
             with w.GridBox(layout=grid):
                 # header row
@@ -598,26 +621,27 @@ def TaskExecutionUI(tasks, pkg, reload, attribute_values, set_attribute_values):
                 for attr in attributes:
                     attr_name = next(pkg.objects(predicate=RDFS.label, subject=attr), uri_to_id(attr))
                     attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
+                    default_value = attribute_values.get(attr, compute_default_for(attr))
                     if attr_type not in XSD:
                         options = pkg.subjects(predicate=RDF.type, object=attr_type)
                         short_options = [pkg.namespace_manager.curie(option) for option in options]  
-                        widget = w.Dropdown(options=short_options, layout=layout, on_value=on_widget_change(attr, None))
+                        widget = w.Dropdown(value=default_value, options=short_options, layout=layout, on_value=on_widget_change(attr, None))
                         type_label = pkg.namespace_manager.curie(attr_type)
                     elif attr_type == XSD.string:
-                        widget = w.Text(value=attribute_values[attr] if attr in attribute_values else "", layout=layout, on_value=on_widget_change(attr, None))
+                        widget = w.Text(value=default_value, layout=layout, on_value=on_widget_change(attr, None))
                         type_label = 'string'
                     elif attr_type == XSD.integer:
-                        widget = w.IntText(value=attribute_values[attr] if attr in attribute_values else 0, layout=layout, on_value=on_widget_change(attr, None))
+                        widget = w.IntText(value=default_value, layout=layout, on_value=on_widget_change(attr, None))
                         type_label = 'integer'
                     elif attr_type == XSD.float:
-                        widget = w.FloatText(value=attribute_values[attr] if attr in attribute_values else 0.0, layout=layout, on_value=on_widget_change(attr, None))
+                        widget = w.FloatText(value=default_value, layout=layout, on_value=on_widget_change(attr, None))
                         type_label = 'float'
                     elif attr_type == XSD.boolean:
-                        widget = w.Checkbox(value=attribute_values[attr] if attr in attribute_values else False, on_value=on_widget_change(attr, None))
+                        widget = w.Checkbox(value=default_value, on_value=on_widget_change(attr, None))
                         type_label = 'boolean'
                     
                     else:
-                        widget = w.Text(value=attribute_values[attr] if attr in attribute_values else "", layout=layout, on_value=on_widget_change(attr, None))
+                        widget = w.Text(value=default_value, layout=layout, on_value=on_widget_change(attr, None))
                         type_label = 'string'
                     
                     w.Label(value=attr_name)
