@@ -41,7 +41,7 @@ class JupyterApplication(ipywidgets.Box):
         tabs = [
             ('Knowledge Modeling', reacton.render_fixed(KnowledgeModelingUI(self.system.pkg))[0]),            
             ('Decisionmaking', reacton.render_fixed(DecisionUI(self.system.engine))[0]),
-            ('Task Execution', reacton.render_fixed(TaskExecutionUI(self.system))[0]),
+            ('Task Execution', reacton.render_fixed(TaskExecutionUI(self.system.engine))[0]),
             ('Explore Graph', reacton.render_fixed(GraphExplorationUI(self.system.pkg))[0]),
         ]
         root = ipywidgets.Tab()
@@ -432,20 +432,25 @@ def DecisionUI(engine):
         return engine.pkg.namespace_manager.curie(decision.subject)
 
     def make_decision_view(decision):
-        return DecisionsBody(engine, decision, reload)
+        return DecisionBody(engine, decision, reload)
     
-    return SelectionMenu(
-        "Decisionmaking", 
-        decisions, 
-        set_decisions, 
-        reload, 
-        decision_label ,  
-        make_decision_view, 
-        item_equality=lambda decision_a, decision_b : decision_a.subject == decision_b.subject
-    )
+    with w.VBox() as main:
+        with w.HBox():
+            w.Button(description="Open new case", on_click=lambda: (engine.open_new_case(), reload()))
+        SelectionMenu(
+            "Decisionmaking", 
+            decisions, 
+            set_decisions, 
+            reload, 
+            decision_label ,  
+            make_decision_view, 
+            item_equality=lambda decision_a, decision_b : decision_a.subject == decision_b.subject
+        )
+    return main
 
 @reacton.component
-def DecisionsBody(engine, current_decision, reload):
+def DecisionBody(engine, current_decision, reload):
+    context_case = current_decision.context.get('case', None)
     with w.VBox(layout=w.Layout(flex='0 1 100%')):
         options, set_options = reacton.use_state([])
         reacton.use_effect(lambda: set_options(current_decision.get_top_k_results(5)), [current_decision])
@@ -455,6 +460,9 @@ def DecisionsBody(engine, current_decision, reload):
                 for reason in reasoning:
                     w.Label(value=f'- {reason}')
                 w.Button(description='Confirm', on_click=lambda: [engine.handle_decision(current_decision, option), reload()])
+        if context_case is not None:
+            w.Button(description='Close Case', on_click=lambda: [engine.close_case(context_case), reload()], layout=w.Layout(flex='0 0 auto'))
+        
 
 
 @reacton.component
@@ -492,12 +500,10 @@ def GraphExplorationUI(graph):
 
 
 @reacton.component
-def TaskExecutionUI(system): # TODO refactor to use SelectionMenu like DecisionUI
+def TaskExecutionUI(engine): # TODO refactor to use SelectionMenu like DecisionUI
     attribute_values, set_attribute_values = reacton.use_state({})
     with w.VBox() as main:
         v.CardTitle(children='Task Execution')
-        engine = system.engine
-        pkg = system.pkg
         tasks, set_tasks = reacton.use_state(list(engine.open_tasks()))
 
         def reload():
@@ -506,7 +512,7 @@ def TaskExecutionUI(system): # TODO refactor to use SelectionMenu like DecisionU
                 
         with w.VBox():
             if len(tasks) > 0:
-                TaskBody(tasks, pkg, reload, attribute_values, set_attribute_values)
+                TaskBody(tasks, engine, reload, attribute_values, set_attribute_values)
             else: 
                 w.Label(value="No open tasks.")
             w.Button(description="Reload Tasks", on_click=lambda *args: reload())
@@ -514,7 +520,8 @@ def TaskExecutionUI(system): # TODO refactor to use SelectionMenu like DecisionU
     return main
 
 @reacton.component
-def TaskBody(tasks, pkg, reload, attribute_values, set_attribute_values):
+def TaskBody(tasks, engine, reload, attribute_values, set_attribute_values):
+    pkg = engine.pkg
     current_task, set_current_task = reacton.use_state(tasks[0][0])
     current_case, set_current_case = reacton.use_state(tasks[0][1])
     reacton.use_effect(lambda: set_current_task(tasks[0][0]), [tasks])
@@ -558,17 +565,10 @@ def TaskBody(tasks, pkg, reload, attribute_values, set_attribute_values):
                     obj = pkg.namespace_manager.expand_curie(val) if isinstance(val, str) else val
                     pkg.set((current_case, attr, obj))
                 else:
-                    if attr_type == XSD.integer:
-                        lit = Literal(val, datatype=XSD.integer)
-                    elif attr_type == XSD.float:
-                        lit = Literal(val, datatype=XSD.float)
-                    elif attr_type == XSD.boolean:
-                        lit = Literal(val, datatype=XSD.boolean)
-                    else:
-                        lit = Literal(val, datatype=attr_type if attr_type is not None else None)
+                    lit = Literal(val, datatype=attr_type if attr_type is not None else None)
                     pkg.set((current_case, attr, lit))
 
-            pkg.set((current_task, BPO.completedAt, Literal(datetime.datetime.now())))
+            engine.complete_task(current_task)
             reload()
             set_submit_clicked(True)
 

@@ -1,6 +1,6 @@
 import queue
 from pyshacl import validate
-from rdflib import RDF, RDFS, Literal
+from rdflib import RDF, RDFS, Literal, URIRef, Namespace
 # from warnings import deprecated
 from random import shuffle
 from pyshacl.consts import SH_ValidationResult, SH_resultSeverity, SH_value, SH_sourceShape, SH_resultMessage, SH_Info
@@ -13,6 +13,7 @@ class KGProcessEngine:
     def __init__(self, pkg):
         self.pkg = pkg
         self.event_queue = queue.Queue()
+        self.deduce()
 
     def handle_event_root(self, event): # This needs to be called somewhere
         self.queue_event(event)
@@ -60,6 +61,28 @@ class KGProcessEngine:
         added = set(self.pkg) - before
 
         return removed, added
+    
+    def open_new_case(self, id=None): # TODO allow selecting case type
+        if id is None:  
+            num_current_case = len(set(self.pkg.subjects(object=BPO.Case, predicate=RDF.type)))
+            id = URIRef(Namespace('http://example.org/')['Case_'+str(num_current_case+1)])  # TODO conceive better namespace scheme
+        new_case = (id, RDF.type, BPO.Case)
+        self.pkg.add(new_case)
+        self.handle_event_root({'knowledge_updated': True, 'added': {new_case}, 'removed': set()})
+
+
+    def close_case(self, case_node):
+        to_set = (case_node, BPO.isClosed, Literal(True))
+        self.pkg.add(to_set)
+        # TODO clean up undecided tasks
+        self.handle_event_root({'knowledge_updated': True, 'added': {to_set}, 'removed': set()}) # TODO code duplication!
+
+
+    def complete_task(self, task_node):
+        to_set = (task_node, BPO.completedAt, Literal(datetime.datetime.now()))
+        self.pkg.add(to_set)
+        self.handle_event_root({'knowledge_updated': True, 'added': {to_set}, 'removed': set()})
+
     
     def open_decisions(self):
         open_next_activities_query = """
