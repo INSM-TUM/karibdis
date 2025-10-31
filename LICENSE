@@ -23,3 +23,4 @@ SOFTWARE.
 
 The following files shipped with this repository are retrieved from outside sources and are subject to different licensing:
 - ./example_domains/sepsis/sepon.ttl retrieved and translated from https://bioportal.bioontology.org/ontologies/SEPON, freely available for public use as of the Bioportal terms of use, state of 19.12.2024 (https://www.bioontology.org/terms) 
+- ./example_domains/sepsis/Sepsis Cases - Event Log.xes retrieved from Mannhardt, Felix (2016): Sepsis Cases - Event Log. Version 1. 4TU.ResearchData. dataset. https://doi.org/10.4121/uuid:915d2bfb-7e84-49ad-a286-dc35f063a460
