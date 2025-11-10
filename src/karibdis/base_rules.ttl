@@ -1,18 +1,16 @@
 @prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
-@prefix ex: <http://infs.cit.tum.de/karibdis/rules/> .
+@prefix rules: <http://infs.cit.tum.de/karibdis/rules/> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 
 
-ex:ExtendStaleCasesRule a sh:NodeShape ;
+rules:ExtendStaleCasesRule a sh:NodeShape ;
     sh:targetClass :Case ;
-    sh:condition ex:ExtendStaleCasesRule; 
+    sh:condition rules:ExtendStaleCasesRule; 
 	sh:rule [
         a sh:SPARQLRule ;
-		sh:prefixes ex: ;
 		sh:construct """
-            PREFIX ex: <http://infs.cit.tum.de/karibdis/rules/>
 			CONSTRUCT {
 				?next :partOf $this .
 				?next rdf:type :Task .
@@ -24,16 +22,16 @@ ex:ExtendStaleCasesRule a sh:NodeShape ;
                 FILTER NOT EXISTS {
                     $this :isClosed true
                 }
-				BIND (ex:nexttask($this) AS ?next) .
+				BIND (rules:nexttask($this) AS ?next) .
 			}
         """ ;
 	] .
 
 
-ex:nexttask
+rules:nexttask
     a sh:SPARQLFunction ;
     sh:parameter [
-        sh:path ex:op1 ;
+        sh:path rules:op1 ;
         sh:datatype :Case ;
         sh:description "The case" ;
     ] ;
@@ -46,10 +44,10 @@ ex:nexttask
     """.
 
 
-ex:lastCompleted
+rules:lastCompleted
     a sh:SPARQLFunction ;
     sh:parameter [
-        sh:path ex:op1 ;
+        sh:path rules:op1 ;
         sh:datatype :Case ;
         sh:description "The case" ;
     ] ;
@@ -58,8 +56,13 @@ ex:lastCompleted
         SELECT (SAMPLE(?task) as ?result) # Note: SAMPLE is a fix for pySHACL error when returning and binding empty list; might not be compliant to SPARQL standard 
         WHERE {
             ?task :partOf ?op1.
-            ?task :completedAt ?completedAt .
+            {
+                SELECT (MAX(?completedAt) AS ?maxCompletedAt) WHERE {
+                    ?task2 :partOf ?op1 .
+                    ?task2 :completedAt ?completedAt .
+                }
+            }
+            ?task :completedAt ?maxCompletedAt .
         }
-        ORDER BY DESC(?completedAt)
         LIMIT 1
     """.

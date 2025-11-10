@@ -2,7 +2,7 @@
 @prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
 @base <http://infs.cit.tum.de/karibdis/baseontology/> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix ex: <http://infs.cit.tum.de/karibdis/rules/> .
+@prefix rules: <http://infs.cit.tum.de/karibdis/rules/> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -47,7 +47,6 @@ declare:ChainResponseRule a sh:NodeShape ;
     sh:targetClass :Case ;
 	sh:rule [
         a sh:SPARQLRule ;
-		sh:prefixes ex: ;
 		sh:construct """
             PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
 			CONSTRUCT {
@@ -57,9 +56,10 @@ declare:ChainResponseRule a sh:NodeShape ;
                  FILTER NOT EXISTS {
                     ?tail :instanceOf ?any.
                 }
-				BIND (ex:lastCompleted($this) AS ?last) .
-                ?last :instanceOf ?a.
+				BIND (rules:lastCompleted($this) AS ?last) .
+                ?last2 :instanceOf ?a.
                 ?a declare:chainresponse ?b.
+                FILTER(?last = ?last2)
             }
         """ ;
 	] .
@@ -88,7 +88,7 @@ declare:AtMostOnce a sh:PropertyShape ;
                     SELECT (COUNT(distinct ?othertask) as ?count)
                     WHERE {
                         ?othertask :partOf ?case .
-                        ?othertask :instanceOf ?activity .
+                        ?othertask :instanceOf | :instanceOf__hypothetical ?activity .
                     }
                 }
                 FILTER(?count > 1)
@@ -111,6 +111,7 @@ declare:AtLeastOnce a sh:PropertyShape ;
                 ?activity declare:exactly_one ?activity .
                 FILTER NOT EXISTS {
                     ?othertask :instanceOf ?activity .
+                    ?othertask :partOf ?case .
                 }
                 
             }
