@@ -460,7 +460,7 @@ def DecisionBody(engine, current_decision, reload):
                 v.Label(children=f'{next(engine.pkg.objects(predicate=RDFS.label, subject=option), engine.pkg.namespace_manager.curie(option))} ({score})', style=LabelStyle(font_weight='bold', width='100%'))
                 for reason in reasoning:
                     w.Label(value=f'- {reason}')
-                w.Button(description='Confirm', on_click=lambda: [engine.handle_decision(current_decision, option), reload()])
+                w.Button(description='Confirm', on_click=lambda option=option: [engine.handle_decision(current_decision, option), reload()])
         if context_case is not None:
             w.Button(description='Close Case', on_click=lambda: [engine.close_case(context_case), reload()], layout=w.Layout(flex='0 0 auto'))
         
@@ -474,7 +474,7 @@ def GraphViz(graph):
     return main
 
 @reacton.component
-def GraphExplorationUI(graph):
+def GraphExplorationUI(graph): # TODO don't populate until shown
     reload, set_reload = reacton.use_state(True)
     place_box, current_result, current_result_size, dirty, run_query = QueryBox(graph)
     current_graph, set_current_graph = reacton.use_state(graph)
@@ -488,7 +488,11 @@ def GraphExplorationUI(graph):
     
     with w.VBox() as main:
         v.CardTitle(children='Graph Exploration')
-        GraphViz(current_graph)
+        
+        if len(current_graph.all_nodes()) < 600:
+            GraphViz(current_graph)
+        else:
+            w.Label(value=f'Too many nodes ({len(current_graph.all_nodes())}) to visualize.')
 
         if not reload:
             place_box()
