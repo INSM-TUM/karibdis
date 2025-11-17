@@ -48,12 +48,6 @@ def app_with_data():
         pkg.add((role_to_add, RDF.type, BPO.Role))
         pkg.add((role_to_add, RDFS.label, Literal(curie.split(':', 1)[1])))
 
-
-    # attach the values to activities
-    for activity in activity_list:
-        pkg.add((activity, BPO.writesValue, _pv_for(BPO.Role, pkg)))
-        pkg.add((activity, BPO.writesValue, _pv_for(BPO.Activity, pkg)))
-       
     assert len(list(app.system.engine.open_decisions())) == 0, "Unexpected open decisions found"
     app.system.engine.open_new_case()
    
@@ -75,7 +69,7 @@ def test_default_run(app_with_data, solara_test, page_session: playwright.sync_a
     page_session.get_by_role("button", name="Reload Tasks").click()
     page_session.get_by_role("button", name="Submit").click()
 
-    _wait_for_task(engine, 0, timeout=0.5)
+    _wait_for_task(engine, 0)
     assert next(engine.open_tasks(), None) is None
         
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
@@ -119,12 +113,12 @@ def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_
     page_session.locator('input:right-of(:text("ProcessValue_integer"))').first.fill(str(test_values[XSD.integer]))
     page_session.locator('input:right-of(:text("ProcessValue_float"))').first.fill(str(test_values[XSD.float]))
     page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill(test_values[XSD.string])
-    page_session.get_by_role("checkbox").check()
+    page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first.check()
     page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(str(ui_inputs[BPO.Role]))
     page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(str(ui_inputs[BPO.Activity]))
     
     page_session.get_by_role("button", name="Submit").click()
-    _wait_for_task(app.system.engine, 0, timeout=2.0)
+    _wait_for_task(app.system.engine, 0.0)
    
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
     
@@ -143,7 +137,7 @@ def test_multiple_tasks_displayed_and_one_task_completed(app_with_data, solara_t
     engine.open_new_case()
     _assign_activity_to_task(pkg, engine, task_2, 'log:Activity_LacticAcid')
 
-    _wait_for_task(engine, 2, timeout=0.5)
+    _wait_for_task(engine, 2)
 
     display(TaskExecutionUI(engine))
     page_session.get_by_role("button", name="Reload Tasks").click()
@@ -155,7 +149,7 @@ def test_multiple_tasks_displayed_and_one_task_completed(app_with_data, solara_t
     page_session.get_by_text("Task_2_1").first.click()
     page_session.get_by_role("button", name="Submit").click()
 
-    _wait_for_task(engine, 1, timeout=0.5)
+    _wait_for_task(engine, 1)
 
     assert (task_2, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
     assert (task, BPO.completedAt, None) not in pkg, "Wrong task was completed"
@@ -168,7 +162,7 @@ def test_only_open_tasks_displayed(app_with_data, solara_test, page_session: pla
     # create a second case and attach its task to an activity
     engine.open_new_case()
     _assign_activity_to_task(pkg, engine, task_2, 'log:Activity_Leucocytes')
-    _wait_for_task(engine, 2, timeout=0.5)
+    _wait_for_task(engine, 2)
     
     # create a third case with no active tasks
     engine.open_new_case()
@@ -183,11 +177,13 @@ def test_only_open_tasks_displayed(app_with_data, solara_test, page_session: pla
     pkg.add((task, BPO.completedAt, Literal('2020-01-01T00:00:00', datatype=XSD.dateTime)))
 
     display(TaskExecutionUI(engine))
-    _wait_for_task(engine, 1, timeout=0.5)
+    _wait_for_task(engine, 1)
     page_session.get_by_role("button", name="Reload Tasks").click()
 
+    # check that closed task is not visible
     assert not page_session.get_by_role("button").get_by_text("Task_1_1").is_visible()
     assert page_session.get_by_role("button").get_by_text("Task_2_1").is_visible()
+    # check that task with no activity assigned is not visible
     assert not page_session.get_by_role("button").get_by_text("Task_3_1").is_visible()
 
 
@@ -199,7 +195,7 @@ def test_values_attached_to_correct_case_and_task(app_with_data, solara_test, pa
     # create a second case and its task
     engine.open_new_case()
     _assign_activity_to_task(pkg, engine, task_2, 'log:Activity_LacticAcid')
-    _wait_for_task(engine, 2, timeout=0.5)
+    _wait_for_task(engine, 2)
 
     display(TaskExecutionUI(engine))
     page_session.get_by_role("button", name="Reload Tasks").click()
@@ -208,7 +204,7 @@ def test_values_attached_to_correct_case_and_task(app_with_data, solara_test, pa
     page_session.get_by_text("Task_2_1").first.click()
     page_session.locator('input:right-of(:text("ProcessValue_integer"))').first.fill('20')
     page_session.get_by_role("button", name="Submit").click()
-    _wait_for_task(engine, 1, timeout=0.5)
+    _wait_for_task(engine, 1)
 
     # The submitted case should have the integer value 20
     val_submtted = pkg.value(subject=case_2, predicate=_pv_for(XSD.integer, pkg))
