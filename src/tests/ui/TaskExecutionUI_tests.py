@@ -1,4 +1,3 @@
-
 import time
 import rdflib
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
@@ -10,16 +9,13 @@ from playwright.sync_api import expect
 from karibdis.Application import *
 from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
 from rdflib import URIRef, BNode
-import re
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath('') + '/src')
-
 
 task = rdflib.term.URIRef('http://example.org/Task_1_1')
+task_activity = rdflib.term.URIRef('http://example.org/Activity_CRP')
 case = rdflib.term.URIRef('http://example.org/Case_1')
-
+task_2 = rdflib.term.URIRef('http://example.org/Task_2_1')
+case_2 = rdflib.term.URIRef('http://example.org/Case_2')
+    
 @pytest.fixture(scope="function")
 def app_with_data():      
     app = JupyterApplication()
@@ -40,7 +36,7 @@ def app_with_data():
 
     activity_list = list(pkg.subjects(predicate=RDF.type, object=BPO.Activity))
     for type in [XSD.integer, XSD.float, XSD.string, XSD.boolean]:
-        example_pv = URIRef(f'http://example.org/ProcessValue_{type.fragment}')
+        example_pv = _pv_for(type)
         pkg.add((example_pv , RDF.type, BPO.ProcessValue))
         pkg.add((example_pv, BPO.dataType, type))
         for activity in activity_list:
@@ -50,11 +46,12 @@ def app_with_data():
     for curie in roles_curie_list:
         role_to_add = pkg.namespace_manager.expand_curie(curie)
         pkg.add((role_to_add, RDF.type, BPO.Role))
+        pkg.add((role_to_add, RDFS.label, Literal(curie.split(':', 1)[1])))
 
-    role = pkg.namespace_manager.expand_curie(':ProcessValue_CRP_Role')
+    role = pkg.namespace_manager.expand_curie('log:ProcessValue_Role')
     pkg.add((role, RDF.type, BPO.ProcessValue))
     pkg.add((role, BPO.dataType, BPO.Role))
-    next_activity = pkg.namespace_manager.expand_curie(':ProcessValue_CRP_NextActivity')
+    next_activity = pkg.namespace_manager.expand_curie('log:ProcessValue_Activity')
     pkg.add((next_activity, RDF.type, BPO.ProcessValue))
     pkg.add((next_activity, BPO.dataType, BPO.Activity))
 
@@ -66,14 +63,12 @@ def app_with_data():
     assert len(list(app.system.engine.open_decisions())) == 0, "Unexpected open decisions found"
     app.system.engine.open_new_case()
    
-    activity = pkg.namespace_manager.expand_curie('log:Activity_CRP')
-    pkg.add((task, BPO.instanceOf, activity))
+    pkg.add((task, BPO.instanceOf, task_activity))
 
     app.system.engine.deduce()
     assert len(list(app.system.engine.open_tasks())) == 1
     assert (task, RDF.type, BPO.Task) in pkg, "Task not found in knowledge graph"
     yield app
-    
 
 
 def test_default_run(app_with_data, solara_test, page_session: playwright.sync_api.Page):
@@ -83,87 +78,155 @@ def test_default_run(app_with_data, solara_test, page_session: playwright.sync_a
 
     display(TaskExecutionUI(engine))
     
-    activity = next(app.system.pkg.objects(task, BPO.instanceOf))
-    
     page_session.get_by_role("button", name="Reload Tasks").click()
     page_session.get_by_role("button", name="Submit").click()
 
-    wait_for_task(engine, 0, timeout=0.5)
+    _wait_for_task(engine, 0, timeout=0.5)
     assert next(engine.open_tasks(), None) is None
-    
-    attributes = list(pkg.objects(subject=activity, predicate=BPO.writesValue))
-    case_objs = []
-    for attr in attributes:
-        case_objs += list(pkg.objects(case, attr))
         
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
 
-    for obj in case_objs:
-        if isinstance(obj, Literal):
-            if isinstance(obj.toPython(), int):
-                assert obj.toPython() == 0, "Default int value is not 0"
-            elif isinstance(obj.toPython(), float):
-                assert obj.toPython() == 0.0, "Default float value is not 0.0"
-            elif isinstance(obj.toPython(), str):
-                assert obj.toPython() == "", "Default string value is not ''"
-            elif isinstance(obj.toPython(), bool):
-                assert obj.toPython() == False, "Default boolean value is not False"
-            elif isinstance(obj, (URIRef, BNode)) and ((obj, RDF.type, BPO.Role) in pkg):
-                expected_role = pkg.namespace_manager.expand_curie(':Doctor')
-                assert obj == expected_role, "Expected role to be :Doctor"
-            elif isinstance(obj, (URIRef, BNode)) and ((obj, RDF.type, BPO.Activity) in pkg):
-                expected_activity = pkg.namespace_manager.expand_curie('log:Activity_CRP')
-                assert obj == expected_activity, "Expected activity to be log:Activity_CRP"
-                
+    expected_defaults = {
+        XSD.integer: 0,
+        XSD.float: 0.0,
+        XSD.string: "",
+        XSD.boolean: False,
+        BPO.Role: 'http://infs.cit.tum.de/karibdis/baseontology/Doctor',
+        BPO.Activity: 'http://example.org/Activity_CRP'}
+    
+    for dtype, expected_value in expected_defaults.items():
+        actual_value = pkg.value(subject=case, predicate= _pv_for(dtype)).toPython()
+        assert actual_value == expected_value, f"Expected {expected_value} ({type(expected_value).__name__}) for data type {dtype}, got {actual_value} ({type(actual_value).__name__})"
+
+
 def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_api.Page) -> None:
     app = app_with_data
     pkg = app.system.pkg
     
     display(TaskExecutionUI(app.system.engine))
  
-    activity = next(pkg.objects(task, BPO.instanceOf))
+    test_values = {
+        XSD.boolean: True,
+        XSD.integer: 100,
+        XSD.float: 55.55,
+        XSD.string: "Test",
+        BPO.Role: 'http://infs.cit.tum.de/karibdis/baseontology/Admin',
+        BPO.Activity: 'http://example.org/Activity_LacticAcid'   
+    }
+    
+    # used for selecting entity values in the UI
+    ui_inputs = {
+        BPO.Role: ':Admin',
+        BPO.Activity: 'log:Activity_LacticAcid'
+    }
 
     page_session.get_by_role("button", name="Reload Tasks").click()
     
-    page_session.get_by_role("spinbutton", name="null").first.click()
-    page_session.get_by_role("spinbutton", name="null").first.fill("100")
-    page_session.get_by_role("spinbutton", name="null").nth(1).click()
-    page_session.get_by_role("spinbutton", name="null").nth(1).fill("55.55")
-    page_session.get_by_role("textbox").click()
-    page_session.get_by_role("textbox").fill("Test")
+    page_session.locator('input:right-of(:text("ProcessValue_integer"))').first.fill(str(test_values[XSD.integer]))
+    page_session.locator('input:right-of(:text("ProcessValue_float"))').first.fill(str(test_values[XSD.float]))
+    page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill(test_values[XSD.string])
     page_session.get_by_role("checkbox").check()
-    page_session.get_by_role("combobox").first.select_option(":Admin")
-    page_session.get_by_role("combobox").nth(1).select_option("log:Activity_LacticAcid")
+    page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(str(ui_inputs[BPO.Role]))
+    page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(str(ui_inputs[BPO.Activity]))
     
     page_session.get_by_role("button", name="Submit").click()
-    wait_for_task(app.system.engine, 0, timeout=2.0)
+    _wait_for_task(app.system.engine, 0, timeout=2.0)
    
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
-   
-    attributes = list(pkg.objects(subject=activity, predicate=BPO.writesValue))
-    case_objs = []
-    for attr in attributes:
-        case_objs += list(pkg.objects(case, attr))
     
-    for obj in case_objs:
-        if isinstance(obj, Literal):
-            val = obj.toPython()
-            if isinstance(val, bool):
-                assert val == True, f"Expected boolean value to be True, got {val}"
-            elif isinstance(val, int):
-                assert val == 100, f"Expected int value to be 100, got {val}"
-            elif isinstance(val, float):
-                assert val == 55.55, f"Expected float value to be 55.55, got {val}"
-            elif isinstance(val, str):
-                assert val == "Test", f"Expected string value to be 'Test', got {val}"
-            elif isinstance(obj, (URIRef, BNode)) and ((obj, RDF.type, BPO.Role) in pkg):
-                expected_role = pkg.namespace_manager.expand_curie(':Admin')
-                assert obj == expected_role, f"Expected role to be :Admin, got {obj}"
-            elif isinstance(obj, (URIRef, BNode)) and ((obj, RDF.type, BPO.Activity) in pkg):
-                expected_activity = pkg.namespace_manager.expand_curie('log:Activity_LacticAcid')
-                assert obj == expected_activity, f"Expected activity to be log:Activity_LacticAcid, got {obj}"
+    for dtype, expected_value in test_values.items():
+        actual_value = pkg.value(subject=case, predicate= _pv_for(dtype)).toPython()
+        assert actual_value == expected_value, f"Expected {expected_value} ({type(expected_value).__name__}) for data type {dtype}, got {actual_value} ({type(actual_value).__name__})"
 
-def wait_for_task(engine, expected_count, timeout=5.0, poll_interval=0.05):
+# TESTS FOR MULTIPLE TASKS
+
+def test_multiple_tasks_displayed_and_one_task_completed(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    engine = app.system.engine
+
+    # Open a new case and assign activity to second task
+    engine.open_new_case()
+    _assign_activity_to_task(pkg, engine, task_2, 'log:Activity_LacticAcid')
+
+    _wait_for_task(engine, 2, timeout=0.5)
+
+    display(TaskExecutionUI(engine))
+    page_session.get_by_role("button", name="Reload Tasks").click()
+
+    assert page_session.get_by_role("button").get_by_text("Task_1_1").is_visible()
+    assert page_session.get_by_role("button").get_by_text("Task_2_1").is_visible()
+
+    # Submit second task
+    page_session.get_by_text("Task_2_1").first.click()
+    page_session.get_by_role("button", name="Submit").click()
+
+    _wait_for_task(engine, 1, timeout=0.5)
+
+    assert (task_2, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
+    assert (task, BPO.completedAt, None) not in pkg, "Wrong task was completed"
+
+def test_only_open_tasks_displayed(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    engine = app.system.engine
+
+    # create a second case and attach its task to an activity
+    engine.open_new_case()
+    _assign_activity_to_task(pkg, engine, task_2, 'log:Activity_Leucocytes')
+    _wait_for_task(engine, 2, timeout=0.5)
+    
+    # create a third case with no active tasks
+    engine.open_new_case()
+    case_3 = URIRef('http://example.org/Case_3')
+    task_3 = URIRef('http://example.org/Task_3_1')
+    
+    # assert that the new case and task exist in the knowledge graph
+    assert (task_3, RDF.type, BPO.Task) in pkg
+    assert (case_3, RDF.type, BPO.Case) in pkg
+
+    # mark first task as completed
+    pkg.add((task, BPO.completedAt, Literal('2020-01-01T00:00:00', datatype=XSD.dateTime)))
+
+    display(TaskExecutionUI(engine))
+    _wait_for_task(engine, 1, timeout=0.5)
+    page_session.get_by_role("button", name="Reload Tasks").click()
+
+    assert not page_session.get_by_role("button").get_by_text("Task_1_1").is_visible()
+    assert page_session.get_by_role("button").get_by_text("Task_2_1").is_visible()
+    assert not page_session.get_by_role("button").get_by_text("Task_3_1").is_visible()
+
+
+def test_values_attached_to_correct_case_and_task(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    engine = app.system.engine
+
+    # create a second case and its task
+    engine.open_new_case()
+    _assign_activity_to_task(pkg, engine, task_2, 'log:Activity_LacticAcid')
+    _wait_for_task(engine, 2, timeout=0.5)
+
+    display(TaskExecutionUI(engine))
+    page_session.get_by_role("button", name="Reload Tasks").click()
+
+    # Select the second task and set a specific integer value
+    page_session.get_by_text("Task_2_1").first.click()
+    page_session.locator('input:right-of(:text("ProcessValue_integer"))').first.fill('20')
+    page_session.get_by_role("button", name="Submit").click()
+    _wait_for_task(engine, 1, timeout=0.5)
+
+    # The submitted case should have the integer value 20
+    val_submtted = pkg.value(subject=case_2, predicate=_pv_for(XSD.integer))
+    assert val_submtted is not None and val_submtted.toPython() == 20
+
+    # The first case should still have no integer value assigned
+    val_orig = pkg.value(subject=case, predicate=_pv_for(XSD.integer))
+    assert val_orig is None
+
+# HELPER FUNCTIONS
+
+def _wait_for_task(engine, expected_count, timeout=5.0, poll_interval=0.05):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -174,17 +237,31 @@ def wait_for_task(engine, expected_count, timeout=5.0, poll_interval=0.05):
         if len(tasks) == expected_count:
             return True
         time.sleep(poll_interval)
-    raise AssertionError(f"open_tasks count not {expected_count} after timeout")
+    raise AssertionError(f"open_tasks count not {expected_count} after timeout, current count: {len(tasks)}")
 
-def wait_for_decision(engine, expected_count, timeout=5.0, poll_interval=0.05):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            decisions = list(engine.open_decisions())
-        except RuntimeError:
-            time.sleep(poll_interval)
-            continue
-        if len(decisions) == expected_count:
-            return True
-        time.sleep(poll_interval)
-    raise AssertionError(f"open_decisions count not {expected_count} after timeout")
+# def _wait_for_decision(engine, expected_count, timeout=5.0, poll_interval=0.05):
+#     deadline = time.time() + timeout
+#     while time.time() < deadline:
+#         try:
+#             decisions = list(engine.open_decisions())
+#         except RuntimeError:
+#             time.sleep(poll_interval)
+#             continue
+#         if len(decisions) == expected_count:
+#             return True
+#         time.sleep(poll_interval)
+#     raise AssertionError(f"open_decisions count not {expected_count} after timeout, current count: {len(decisions)}")
+
+def _pv_for(dtype):
+    # attach the last part of the dtype URI (after the last '/')
+    if dtype not in XSD:
+        name = str(dtype).rsplit('/', 1)[-1]
+    else:
+        name = dtype.fragment
+    return URIRef(f'http://example.org/ProcessValue_{name}')
+
+def _assign_activity_to_task(pkg, engine, task_uri, activity_curie):
+    # assign activity to undecided task
+    activity = pkg.namespace_manager.expand_curie(activity_curie)
+    pkg.add((task_uri, BPO.instanceOf, activity))
+    engine.deduce()
