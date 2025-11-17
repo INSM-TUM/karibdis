@@ -35,8 +35,8 @@ def app_with_data():
         pkg.add((activity, RDFS.label, Literal(curie.split(':', 1)[1])))
 
     activity_list = list(pkg.subjects(predicate=RDF.type, object=BPO.Activity))
-    for type in [XSD.integer, XSD.float, XSD.string, XSD.boolean]:
-        example_pv = _pv_for(type)
+    for type in [XSD.integer, XSD.float, XSD.string, XSD.boolean, BPO.Role, BPO.Activity]:
+        example_pv = _pv_for(type, pkg)
         pkg.add((example_pv , RDF.type, BPO.ProcessValue))
         pkg.add((example_pv, BPO.dataType, type))
         for activity in activity_list:
@@ -48,17 +48,11 @@ def app_with_data():
         pkg.add((role_to_add, RDF.type, BPO.Role))
         pkg.add((role_to_add, RDFS.label, Literal(curie.split(':', 1)[1])))
 
-    role = pkg.namespace_manager.expand_curie('log:ProcessValue_Role')
-    pkg.add((role, RDF.type, BPO.ProcessValue))
-    pkg.add((role, BPO.dataType, BPO.Role))
-    next_activity = pkg.namespace_manager.expand_curie('log:ProcessValue_Activity')
-    pkg.add((next_activity, RDF.type, BPO.ProcessValue))
-    pkg.add((next_activity, BPO.dataType, BPO.Activity))
 
     # attach the values to activities
     for activity in activity_list:
-        pkg.add((activity, BPO.writesValue, role))
-        pkg.add((activity, BPO.writesValue, next_activity))
+        pkg.add((activity, BPO.writesValue, _pv_for(BPO.Role, pkg)))
+        pkg.add((activity, BPO.writesValue, _pv_for(BPO.Activity, pkg)))
        
     assert len(list(app.system.engine.open_decisions())) == 0, "Unexpected open decisions found"
     app.system.engine.open_new_case()
@@ -95,7 +89,7 @@ def test_default_run(app_with_data, solara_test, page_session: playwright.sync_a
         BPO.Activity: 'http://example.org/Activity_CRP'}
     
     for dtype, expected_value in expected_defaults.items():
-        actual_value = pkg.value(subject=case, predicate= _pv_for(dtype)).toPython()
+        actual_value = pkg.value(subject=case, predicate= _pv_for(dtype, pkg)).toPython()
         assert actual_value == expected_value, f"Expected {expected_value} ({type(expected_value).__name__}) for data type {dtype}, got {actual_value} ({type(actual_value).__name__})"
 
 
@@ -135,7 +129,7 @@ def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
     
     for dtype, expected_value in test_values.items():
-        actual_value = pkg.value(subject=case, predicate= _pv_for(dtype)).toPython()
+        actual_value = pkg.value(subject=case, predicate= _pv_for(dtype, pkg)).toPython()
         assert actual_value == expected_value, f"Expected {expected_value} ({type(expected_value).__name__}) for data type {dtype}, got {actual_value} ({type(actual_value).__name__})"
 
 # TESTS FOR MULTIPLE TASKS
@@ -217,11 +211,11 @@ def test_values_attached_to_correct_case_and_task(app_with_data, solara_test, pa
     _wait_for_task(engine, 1, timeout=0.5)
 
     # The submitted case should have the integer value 20
-    val_submtted = pkg.value(subject=case_2, predicate=_pv_for(XSD.integer))
+    val_submtted = pkg.value(subject=case_2, predicate=_pv_for(XSD.integer, pkg))
     assert val_submtted is not None and val_submtted.toPython() == 20
 
     # The first case should still have no integer value assigned
-    val_orig = pkg.value(subject=case, predicate=_pv_for(XSD.integer))
+    val_orig = pkg.value(subject=case, predicate=_pv_for(XSD.integer, pkg))
     assert val_orig is None
 
 # HELPER FUNCTIONS
@@ -252,12 +246,14 @@ def _wait_for_task(engine, expected_count, timeout=5.0, poll_interval=0.05):
 #         time.sleep(poll_interval)
 #     raise AssertionError(f"open_decisions count not {expected_count} after timeout, current count: {len(decisions)}")
 
-def _pv_for(dtype):
+def _pv_for(dtype, pkg):
     # attach the last part of the dtype URI (after the last '/')
-    if dtype not in XSD:
-        name = str(dtype).rsplit('/', 1)[-1]
-    else:
-        name = dtype.fragment
+    if dtype == BPO.Role:
+         return pkg.namespace_manager.expand_curie('log:ProcessValue_Role')
+    elif dtype == BPO.Activity:
+         return pkg.namespace_manager.expand_curie('log:ProcessValue_Activity')
+    
+    name = dtype.fragment
     return URIRef(f'http://example.org/ProcessValue_{name}')
 
 def _assign_activity_to_task(pkg, engine, task_uri, activity_curie):
