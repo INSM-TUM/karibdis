@@ -668,6 +668,14 @@ def TaskBody(tasks, engine, reload, attribute_values, set_attribute_values):
             for task, case in tasks:
                 w.Button(description=f"Task: {pkg.namespace_manager.curie(task)} - Case: {pkg.namespace_manager.curie(case)}", on_click=lambda t=task, c=case: (set_current_task(t), set_current_case(c)), style=w.ButtonStyle(button_color='#DDEEFF' if task == current_task else None))
         
+        def load_existing_value_for(attr):
+            
+            existing = pkg.value(subject=current_case, predicate=attr)
+            if existing is not None:
+                return existing.toPython() if isinstance(existing, Literal) else pkg.namespace_manager.curie(existing)
+            else:
+                return compute_default_for(attr)
+            
         def compute_default_for(attr):
             # return a default value consistent with what _init_defaults would have set
             attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
@@ -708,7 +716,7 @@ def TaskBody(tasks, engine, reload, attribute_values, set_attribute_values):
                 for attr in attributes:
                     attr_name = next(pkg.objects(predicate=RDFS.label, subject=attr), uri_to_id(attr))
                     attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
-                    default_value = attribute_values.get(attr, compute_default_for(attr))
+                    default_value = attribute_values.get(attr, load_existing_value_for(attr))
                     if attr_type not in XSD:
                         options = pkg.subjects(predicate=RDF.type, object=attr_type)
                         short_options = [pkg.namespace_manager.curie(option) for option in options]  

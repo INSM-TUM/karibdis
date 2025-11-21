@@ -11,6 +11,7 @@ from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
 from rdflib import URIRef, BNode
 
 task = rdflib.term.URIRef('http://example.org/Task_1_1')
+task_1_2 = rdflib.term.URIRef('http://example.org/Task_1_2')
 task_activity = rdflib.term.URIRef('http://example.org/Activity_CRP')
 case = rdflib.term.URIRef('http://example.org/Case_1')
 task_2 = rdflib.term.URIRef('http://example.org/Task_2_1')
@@ -118,7 +119,7 @@ def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_
     page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(str(ui_inputs[BPO.Activity]))
     
     page_session.get_by_role("button", name="Submit").click()
-    _wait_for_task(app.system.engine, 0.0)
+    _wait_for_task(app.system.engine, 0)
    
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
     
@@ -213,7 +214,53 @@ def test_values_attached_to_correct_case_and_task(app_with_data, solara_test, pa
     # The first case should still have no integer value assigned
     val_orig = pkg.value(subject=case, predicate=_pv_for(XSD.integer, pkg))
     assert val_orig is None
+    
+def test_load_existing_values_into_ui(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    
+    display(TaskExecutionUI(app.system.engine))
+ 
+    test_values = {
+        XSD.boolean: True,
+        XSD.integer: 100,
+        XSD.float: 55.55,
+        XSD.string: "Test",
+        BPO.Role: 'http://infs.cit.tum.de/karibdis/baseontology/Admin',
+        BPO.Activity: 'http://example.org/Activity_LacticAcid'   
+    }
+    
+    # used for selecting entity values in the UI
+    ui_inputs = {
+        BPO.Role: ':Admin',
+        BPO.Activity: 'log:Activity_LacticAcid'
+    }
 
+    page_session.get_by_role("button", name="Reload Tasks").click()
+    
+    page_session.locator('input:right-of(:text("ProcessValue_integer"))').first.fill(str(test_values[XSD.integer]))
+    page_session.locator('input:right-of(:text("ProcessValue_float"))').first.fill(str(test_values[XSD.float]))
+    page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill(test_values[XSD.string])
+    page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first.check()
+    page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(str(ui_inputs[BPO.Role]))
+    page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(str(ui_inputs[BPO.Activity]))
+    
+    page_session.get_by_role("button", name="Submit").click()
+    _wait_for_task(app.system.engine, 0)
+    
+    _assign_activity_to_task(pkg, app.system.engine, task_1_2, 'log:Activity_CRP')
+    _wait_for_task(app.system.engine, 1)
+    page_session.get_by_role("button", name="Reload Tasks").click()
+    page_session.get_by_text("Task_1_2").first.click()
+    
+    # verify that the previously submitted values are loaded into the UI
+    expect(page_session.locator('input:right-of(:text("ProcessValue_integer"))').first).to_have_value(str(test_values[XSD.integer]))
+    expect(page_session.locator('input:right-of(:text("ProcessValue_float"))').first).to_have_value(str(test_values[XSD.float]))
+    expect(page_session.locator('input:right-of(:text("ProcessValue_string"))').first).to_have_value(test_values[XSD.string])
+    expect(page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first).to_be_checked()
+    expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))').first).to_have_value(str(ui_inputs[BPO.Role]))
+    expect(page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first).to_have_value(str(ui_inputs[BPO.Activity]))
+    
 # HELPER FUNCTIONS
 
 def _wait_for_task(engine, expected_count, timeout=5.0, poll_interval=0.05):
