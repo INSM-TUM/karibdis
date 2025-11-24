@@ -178,7 +178,7 @@ def ActiveImportUI(source, set_source, pkg):
             set_subtitle(f'Importing from {source}')
             ValidationView(importer, complete, set_stage)
         
-    w.Button(description="Cancel Knowledge Import", on_click=cancel)
+    w.Button(description="Cancel Knowledge Import", on_click=cancel, layout=w.Layout(flex='0 0 auto'))
 
 @reacton.component
 def TextExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
@@ -536,7 +536,9 @@ def visualize_addition_graph(importer): # TODO Partial duplicate to GraphViz
 @reacton.component
 def DecisionBody(engine, current_decision, reload):
     context_case = current_decision.context.get('case', None)
+    context_type = current_decision.context.get('target_type', None)
     with w.VBox(layout=w.Layout(overflow='scroll', height='60vh', width='100%')) as main:
+        v.CardTitle(children=f' Decide {engine.pkg.label(context_type)}' + (f' for {engine.pkg.label(context_case)}' if context_case else ''))
         options, set_options = reacton.use_state([])
         reacton.use_effect(lambda: set_options(current_decision.get_top_k_results(20)), [current_decision])
         for score, option, reasoning in options:
@@ -604,7 +606,7 @@ def TaskExecutionUI(engine): # TODO refactor to use SelectionMenu like DecisionU
                 TaskBody(tasks, engine, reload, attribute_values, set_attribute_values)
             else: 
                 w.Label(value="No open tasks.")
-            w.Button(description="Reload Tasks", on_click=lambda *args: reload())
+            w.Button(description="Reload Tasks", on_click=lambda *args: reload(), layout=w.Layout(flex='0 0 auto'))
             
     return main
 
@@ -742,7 +744,7 @@ def TaskBody(tasks, engine, reload, attribute_values, set_attribute_values):
                     w.Label(value=attr_name)
                     w.Box(children=[widget])
                     w.Label(value=type_label)
-            w.Button(description="Submit", on_click=on_submit_click)
+            w.Button(description="Submit", on_click=on_submit_click, layout=w.Layout(flex='0 0 auto'))
                 
     return main
 
@@ -791,8 +793,8 @@ def TextEditor(importer, init_value, set_editing):
                 print('No changes')
             set_editing(False)
 
-        button_accept = w.Button(description='Accept Edit', on_click=accept_edit)
-        button_cancel = w.Button(description='Cancel Edit', on_click=lambda: set_editing(False))
+        button_accept = w.Button(description='Accept Edit', on_click=accept_edit, layout=w.Layout(flex='0 0 auto'))
+        button_cancel = w.Button(description='Cancel Edit', on_click=lambda: set_editing(False), layout=w.Layout(flex='0 0 auto'))
     return main
 
 
