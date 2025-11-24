@@ -20,7 +20,7 @@ def test_select_right_option(solara_test, page_session: Page):
     display(DecisionBody(engine, decision, lambda : None))
     second_option = page_session.get_by_text('Activity').nth(2) # Take the third of five options
     activity = second_option.inner_text().split(' ')[0]
-    second_botton = page_session.locator('button:below(:text("Activity"))').nth(2) # Take the third of five options
+    second_botton = page_session.locator(f'button:below(:text("{activity}"))').first # Take the button below that option
     second_botton.click() 
     print(f'Selected activity: {activity}')
     def assert_correct_option_selected():
