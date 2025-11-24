@@ -1,7 +1,7 @@
 import time
 import rdflib
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
-from rdflib import RDF, RDFS, Literal, XSD
+from rdflib import RDF, RDFS, Literal, XSD, URIRef
 from IPython.display import display
 import pytest
 import playwright.sync_api
@@ -99,14 +99,8 @@ def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_
         XSD.integer: 100,
         XSD.float: 55.55,
         XSD.string: "Test",
-        BPO.Role: 'http://infs.cit.tum.de/karibdis/baseontology/Admin',
-        BPO.Activity: 'http://example.org/Activity_LacticAcid'   
-    }
-    
-    # used for selecting entity values in the UI
-    ui_inputs = {
-        BPO.Role: ':Admin',
-        BPO.Activity: 'log:Activity_LacticAcid'
+        BPO.Role: URIRef('http://infs.cit.tum.de/karibdis/baseontology/Admin'),
+        BPO.Activity: URIRef('http://example.org/Activity_LacticAcid')   
     }
 
     page_session.get_by_role("button", name="Reload Tasks").click()
@@ -115,8 +109,8 @@ def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_
     page_session.locator('input:right-of(:text("ProcessValue_float"))').first.fill(str(test_values[XSD.float]))
     page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill(test_values[XSD.string])
     page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first.check()
-    page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(str(ui_inputs[BPO.Role]))
-    page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(str(ui_inputs[BPO.Activity]))
+    page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(pkg.label(test_values[BPO.Role]))
+    page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(pkg.label(test_values[BPO.Activity]))
     
     page_session.get_by_role("button", name="Submit").click()
     _wait_for_task(app.system.engine, 0)
@@ -124,6 +118,8 @@ def test_expected_run(app_with_data, solara_test, page_session: playwright.sync_
     assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
     
     for dtype, expected_value in test_values.items():
+        if dtype in [BPO.Role, BPO.Activity]:
+            expected_value = str(expected_value)
         actual_value = pkg.value(subject=case, predicate= _pv_for(dtype, pkg)).toPython()
         assert actual_value == expected_value, f"Expected {expected_value} ({type(expected_value).__name__}) for data type {dtype}, got {actual_value} ({type(actual_value).__name__})"
 
@@ -226,24 +222,18 @@ def test_load_existing_values_into_ui(app_with_data, solara_test, page_session: 
         XSD.integer: 100,
         XSD.float: 55.55,
         XSD.string: "Test",
-        BPO.Role: 'http://infs.cit.tum.de/karibdis/baseontology/Admin',
-        BPO.Activity: 'http://example.org/Activity_LacticAcid'   
+        BPO.Role: URIRef('http://infs.cit.tum.de/karibdis/baseontology/Admin'),
+        BPO.Activity: URIRef('http://example.org/Activity_LacticAcid')   
     }
     
-    # used for selecting entity values in the UI
-    ui_inputs = {
-        BPO.Role: ':Admin',
-        BPO.Activity: 'log:Activity_LacticAcid'
-    }
-
     page_session.get_by_role("button", name="Reload Tasks").click()
     
     page_session.locator('input:right-of(:text("ProcessValue_integer"))').first.fill(str(test_values[XSD.integer]))
     page_session.locator('input:right-of(:text("ProcessValue_float"))').first.fill(str(test_values[XSD.float]))
     page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill(test_values[XSD.string])
     page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first.check()
-    page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(str(ui_inputs[BPO.Role]))
-    page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(str(ui_inputs[BPO.Activity]))
+    page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(pkg.label(test_values[BPO.Role]))
+    page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first.select_option(pkg.label(test_values[BPO.Activity]))
     
     page_session.get_by_role("button", name="Submit").click()
     _wait_for_task(app.system.engine, 0)
@@ -258,8 +248,8 @@ def test_load_existing_values_into_ui(app_with_data, solara_test, page_session: 
     expect(page_session.locator('input:right-of(:text("ProcessValue_float"))').first).to_have_value(str(test_values[XSD.float]))
     expect(page_session.locator('input:right-of(:text("ProcessValue_string"))').first).to_have_value(test_values[XSD.string])
     expect(page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first).to_be_checked()
-    expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))').first).to_have_value(str(ui_inputs[BPO.Role]))
-    expect(page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first).to_have_value(str(ui_inputs[BPO.Activity]))
+    expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))').first).to_have_value(pkg.label(test_values[BPO.Role]))
+    expect(page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first).to_have_value(pkg.label(test_values[BPO.Activity]))
     
 # HELPER FUNCTIONS
 
