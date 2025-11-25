@@ -17,8 +17,3 @@ def test_app_runs(solara_test, page_session: Page):
     expect(tablist.get_by_text('Decisionmaking')).to_be_visible()
     expect(tablist.get_by_text('Task Execution')).to_be_visible()
     expect(tablist.get_by_text('Explore Graph')).to_be_visible()
-
-# pip install "pytest-ipywidgets"
-# playwright install
-# playwright install-deps
-# pytest tests/ui.py
