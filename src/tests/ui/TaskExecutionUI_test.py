@@ -18,10 +18,20 @@ task_2 = rdflib.term.URIRef('http://example.org/Task_2_1')
 case_2 = rdflib.term.URIRef('http://example.org/Case_2')
     
 @pytest.fixture(scope="function")
-def app_with_data():      
+def app_with_data(request):
+    
+    if hasattr(request, 'param'):
+        config = request.param
+    else:
+        config = {
+            "activity_pvs": [XSD.integer, XSD.float, XSD.string, XSD.boolean, BPO.Role, BPO.Activity]
+        }
+    
     app = JupyterApplication()
     app.system = KnowledgeGraphBPMS()
     pkg = app.system.pkg
+    activity_pvs = config.get("activity_pvs", [])
+    
     
     pkg.bind("log", "http://example.org/", override = True)
     activity_curie_list = [
@@ -41,7 +51,8 @@ def app_with_data():
         pkg.add((example_pv , RDF.type, BPO.ProcessValue))
         pkg.add((example_pv, BPO.dataType, type))
         for activity in activity_list:
-            pkg.add((activity, BPO.writesValue, example_pv))
+            if type in activity_pvs:
+                pkg.add((activity, BPO.writesValue, example_pv))
 
     roles_curie_list = [':Doctor', ':Nurse', ':Admin']
     for curie in roles_curie_list:
@@ -139,8 +150,8 @@ def test_multiple_tasks_displayed_and_one_task_completed(app_with_data, solara_t
     display(TaskExecutionUI(engine))
     page_session.get_by_role("button", name="Reload Tasks").click()
 
-    assert page_session.get_by_role("button").get_by_text("Task_1_1").is_visible()
-    assert page_session.get_by_role("button").get_by_text("Task_2_1").is_visible()
+    expect(page_session.get_by_role("button").get_by_text("Task_1_1")).to_be_visible()
+    expect(page_session.get_by_role("button").get_by_text("Task_2_1")).to_be_visible()
 
     # Submit second task
     page_session.get_by_text("Task_2_1").first.click()
@@ -178,11 +189,10 @@ def test_only_open_tasks_displayed(app_with_data, solara_test, page_session: pla
     page_session.get_by_role("button", name="Reload Tasks").click()
 
     # check that closed task is not visible
-    assert not page_session.get_by_role("button").get_by_text("Task_1_1").is_visible()
-    assert page_session.get_by_role("button").get_by_text("Task_2_1").is_visible()
+    expect(page_session.get_by_role("button").get_by_text("Task_1_1")).not_to_be_visible()
+    expect(page_session.get_by_role("button").get_by_text("Task_2_1")).to_be_visible()
     # check that task with no activity assigned is not visible
-    assert not page_session.get_by_role("button").get_by_text("Task_3_1").is_visible()
-
+    expect(page_session.get_by_role("button").get_by_text("Task_3_1")).not_to_be_visible()
 
 def test_values_attached_to_correct_case_and_task(app_with_data, solara_test, page_session: playwright.sync_api.Page):
     app = app_with_data
@@ -250,6 +260,93 @@ def test_load_existing_values_into_ui(app_with_data, solara_test, page_session: 
     expect(page_session.locator(':right-of(:text("ProcessValue_boolean"))').get_by_role("checkbox").first).to_be_checked()
     expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))').first).to_have_value(pkg.label(test_values[BPO.Role]))
     expect(page_session.locator('select:right-of(:text("ProcessValue_Activity"))').first).to_have_value(pkg.label(test_values[BPO.Activity]))
+
+@pytest.mark.parametrize("app_with_data", [{"activity_pvs": [XSD.integer, BPO.Role]}], indirect=True)    
+def test_add_process_value(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    engine = app.system.engine
+    
+    display(TaskExecutionUI(engine))
+    page_session.get_by_role("button", name="Reload Tasks").click()
+    
+    # Initially only activity-linked ProcessValues should be visible (integer and Role)
+    expect(page_session.get_by_text("ProcessValue_integer")).to_be_visible()
+    expect(page_session.get_by_text("ProcessValue_Role")).to_be_visible()
+    expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
+    expect(page_session.get_by_text("ProcessValue_float")).not_to_be_visible()
+    
+    page_session.get_by_role("button", name="Add new ProcessValue").click()
+    expect(page_session.get_by_text("Add a new ProcessValue to this case")).to_be_visible()
+    
+    page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+    page_session.get_by_role("button", name="Create").click()
+    
+    expect(page_session.get_by_text("Add a new ProcessValue to this case")).not_to_be_visible()
+    expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+    
+    page_session.get_by_role("button", name="Add new ProcessValue").click()
+    page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_float")
+    page_session.get_by_role("button", name="Create").click()
+    
+    expect(page_session.get_by_text("ProcessValue_float")).to_be_visible()
+    
+    # Fill in values for the newly added ProcessValues
+    page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill("Added String")
+    page_session.locator('input:right-of(:text("ProcessValue_float"))').first.fill("99.99")
+    page_session.get_by_role("button", name="Submit").click()
+    _wait_for_task(engine, 0)
+    
+    # Verify the added ProcessValues have correct values in the knowledge graph
+    string_pv = _pv_for(XSD.string, pkg)
+    float_pv = _pv_for(XSD.float, pkg)
+    
+    string_value = pkg.value(subject=case, predicate=string_pv)
+    float_value = pkg.value(subject=case, predicate=float_pv)
+    
+    assert string_value is not None and string_value.toPython() == "Added String"
+    assert float_value is not None and float_value.toPython() == 99.99
+    
+    # Verify the task is completed
+    assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
+
+@pytest.mark.parametrize("app_with_data", [{"activity_pvs": [XSD.integer, BPO.Role]}], indirect=True)
+def test_add_process_value_persistence_across_tasks(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    engine = app.system.engine
+    
+    display(TaskExecutionUI(engine))
+    page_session.get_by_role("button", name="Reload Tasks").click()
+    
+    # Add ProcessValue_string for the first task
+    page_session.get_by_role("button", name="Add new ProcessValue").click()
+    page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+    page_session.get_by_role("button", name="Create").click()
+    
+    expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+    page_session.locator('input:right-of(:text("ProcessValue_string"))').first.fill("First Task Value")
+    page_session.get_by_role("button", name="Submit").click()
+    _wait_for_task(engine, 0)
+    
+    # Create a second task for the same case
+    _assign_activity_to_task(pkg, engine, task_1_2, 'log:Activity_CRP')
+    _wait_for_task(engine, 1)
+    
+    page_session.get_by_role("button", name="Reload Tasks").click()
+    expect(page_session.get_by_text("Task_1_2").first).to_be_visible()
+    
+    # Verify ProcessValue_string is not visible initially
+    expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
+    
+    # Add ProcessValue_string again for the second task
+    page_session.get_by_role("button", name="Add new ProcessValue").click()
+    page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+    page_session.get_by_role("button", name="Create").click()
+    
+    # Verify it now appears and shows the existing value from the case
+    expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+    expect(page_session.locator('input:right-of(:text("ProcessValue_string"))').first).to_have_value("First Task Value")
     
 # HELPER FUNCTIONS
 
@@ -265,19 +362,6 @@ def _wait_for_task(engine, expected_count, timeout=5.0, poll_interval=0.05):
             return True
         time.sleep(poll_interval)
     raise AssertionError(f"open_tasks count not {expected_count} after timeout, current count: {len(tasks)}")
-
-# def _wait_for_decision(engine, expected_count, timeout=5.0, poll_interval=0.05):
-#     deadline = time.time() + timeout
-#     while time.time() < deadline:
-#         try:
-#             decisions = list(engine.open_decisions())
-#         except RuntimeError:
-#             time.sleep(poll_interval)
-#             continue
-#         if len(decisions) == expected_count:
-#             return True
-#         time.sleep(poll_interval)
-#     raise AssertionError(f"open_decisions count not {expected_count} after timeout, current count: {len(decisions)}")
 
 def _pv_for(dtype, pkg):
     # attach the last part of the dtype URI (after the last '/')
