@@ -33,10 +33,14 @@ jobs:
 
     - name: Ensure browsers are installed
       run: python -m playwright install --with-deps
-    - name: Run your tests
+    - name: Run base tests
       run: |
         cd src
-        pytest --tracing=retain-on-failure
+        pytest --tracing=retain-on-failure --ignore=./tests/example_domains
+    - name: Run domain usage tests
+      run: |
+        cd src
+        pytest --tracing=retain-on-failure ./tests/example_domains
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:
