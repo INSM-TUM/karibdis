@@ -697,7 +697,7 @@ def TaskBody(tasks, engine, reload, attribute_values, set_attribute_values):
             return handler
         
         with w.VBox():  
-            w.Label(value= f"Selected Task: {pkg.label(activity)} - {pkg.label(current_task)} ")
+            v.CardTitle(children=f'{pkg.label(activity)} for {engine.pkg.label(current_case)}')
             grid = w.Layout(grid_template_columns='1fr 1fr 1fr', grid_gap='8px')
             with w.GridBox(layout=grid):
                 # header row
