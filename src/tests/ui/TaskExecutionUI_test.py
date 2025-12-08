@@ -16,6 +16,9 @@ task_activity = rdflib.term.URIRef('http://example.org/Activity_CRP')
 case = rdflib.term.URIRef('http://example.org/Case_1')
 task_2 = rdflib.term.URIRef('http://example.org/Task_2_1')
 case_2 = rdflib.term.URIRef('http://example.org/Case_2')
+senior_doctor = URIRef('http://example.org/SeniorDoctor')
+junior_nurse = URIRef('http://example.org/JuniorNurse')
+medical_technician = URIRef('http://example.org/MedicalTechnician')
     
 @pytest.fixture(scope="function")
 def app_with_data(request):
@@ -31,6 +34,7 @@ def app_with_data(request):
     app.system = KnowledgeGraphBPMS()
     pkg = app.system.pkg
     activity_pvs = config.get("activity_pvs", [])
+    create_subclasses = config.get("create_subclasses", False)
     
     
     pkg.bind("log", "http://example.org/", override = True)
@@ -59,6 +63,35 @@ def app_with_data(request):
         role_to_add = pkg.namespace_manager.expand_curie(curie)
         pkg.add((role_to_add, RDF.type, BPO.Role))
         pkg.add((role_to_add, RDFS.label, Literal(curie.split(':', 1)[1])))
+
+    # Create subclass instances if requested
+    if create_subclasses:
+        medical_role = URIRef('http://example.org/MedicalRole')
+        doctor_role = URIRef('http://example.org/DoctorRole')
+        nurse_role = URIRef('http://example.org/NurseRole')
+        
+        # Define test subclasses
+        pkg.add((medical_role, RDF.type, RDFS.Class))
+        pkg.add((medical_role, RDFS.subClassOf, BPO.Role))
+        pkg.add((medical_role, RDFS.label, Literal('MedicalRole')))
+        
+        pkg.add((doctor_role, RDF.type, RDFS.Class))
+        pkg.add((doctor_role, RDFS.subClassOf, medical_role))
+        pkg.add((doctor_role, RDFS.label, Literal('DoctorRole')))
+        
+        pkg.add((nurse_role, RDF.type, RDFS.Class))
+        pkg.add((nurse_role, RDFS.subClassOf, medical_role))
+        pkg.add((nurse_role, RDFS.label, Literal('NurseRole')))
+        
+        # Create instances of the subclasses
+        pkg.add((medical_technician, RDF.type, medical_role))
+        pkg.add((medical_technician, RDFS.label, Literal('Medical Technician')))
+        
+        pkg.add((senior_doctor, RDF.type, doctor_role))
+        pkg.add((senior_doctor, RDFS.label, Literal('Senior Doctor')))
+        
+        pkg.add((junior_nurse, RDF.type, nurse_role))
+        pkg.add((junior_nurse, RDFS.label, Literal('Junior Nurse')))
 
     assert len(list(app.system.engine.open_decisions())) == 0, "Unexpected open decisions found"
     app.system.engine.open_new_case()
@@ -347,6 +380,41 @@ def test_add_process_value_persistence_across_tasks(app_with_data, solara_test, 
     # Verify it now appears and shows the existing value from the case
     expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
     expect(page_session.locator('input:right-of(:text("ProcessValue_string"))').first).to_have_value("First Task Value")
+
+@pytest.mark.parametrize("app_with_data", [{"activity_pvs": [BPO.Role], "create_subclasses": True}], indirect=True)
+def test_select_subclass_instances_for_entity_process_values(app_with_data, solara_test, page_session: playwright.sync_api.Page):
+    app = app_with_data
+    pkg = app.system.pkg
+    engine = app.system.engine
+    
+    display(TaskExecutionUI(engine))
+    
+    page_session.get_by_role("button", name="Reload Tasks").click()
+    expect(page_session.get_by_text("ProcessValue_Role")).to_be_visible()
+    role_dropdown = page_session.locator('select:right-of(:text("ProcessValue_Role"))').first
+    expect(role_dropdown).to_be_visible()
+    role_dropdown.click()
+    
+    # Verify that subclass instances appear in the dropdown
+    expect(role_dropdown).to_contain_text('Senior Doctor')
+    expect(role_dropdown).to_contain_text('Junior Nurse')
+    expect(role_dropdown).to_contain_text('Medical Technician')
+    
+    # Test selecting a subclass instance
+    role_dropdown.select_option('Senior Doctor')
+    
+    # Verify the selection
+    expect(role_dropdown).to_have_value('Senior Doctor')
+    page_session.get_by_role("button", name="Submit").click()
+    _wait_for_task(engine, 0)
+    
+    # Verify the subclass instance was assigned to the case
+    role_pv = _pv_for(BPO.Role, pkg)
+    assigned_role = pkg.value(subject=case, predicate=role_pv)
+    
+    assert assigned_role == senior_doctor, f"Expected {senior_doctor}, got {assigned_role}"
+    assert (task, BPO.completedAt, None) in pkg, "Task not marked as completed in knowledge graph"
+    
     
 # HELPER FUNCTIONS
 
