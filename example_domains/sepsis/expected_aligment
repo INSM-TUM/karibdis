@@ -1,8 +1,11 @@
-[(rdflib.term.URIRef('http://www.semanticweb.org/zchero/ontologies/2023/11/SepsisOntology#Leukocyte_Count'),
-  rdflib.term.URIRef('http://example.org/ProcessValue_Leucocytes')),
- (rdflib.term.URIRef('http://www.semanticweb.org/zchero/ontologies/2023/11/SepsisOntology#C-Reactive_Protein'),
-  rdflib.term.URIRef('http://example.org/ProcessValue_CRP')),
- (rdflib.term.URIRef('http://www.semanticweb.org/zchero/ontologies/2023/11/SepsisOntology#Lactate'),
-  rdflib.term.URIRef('http://example.org/ProcessValue_LacticAcid')),
- (rdflib.term.URIRef('http://www.semanticweb.org/zchero/ontologies/2023/11/SepsisOntology#Hypoxia'),
-  rdflib.term.URIRef('http://example.org/ProcessValue_Hypoxie'))]
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix sepon: <http://www.semanticweb.org/zchero/ontologies/2023/11/SepsisOntology#> .
+@prefix ns1: <http://example.org/> .
+
+sepon:C-Reactive_Protein owl:sameAs ns1:ProcessValue_CRP .
+
+sepon:Hypoxia owl:sameAs ns1:ProcessValue_Hypoxie .
+
+sepon:Lactate owl:sameAs ns1:ProcessValue_LacticAcid .
+
+sepon:Leukocyte_Count owl:sameAs ns1:ProcessValue_Leucocytes .
