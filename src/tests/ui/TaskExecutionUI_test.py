@@ -38,20 +38,49 @@ basic_test_values = {
     }
     
 @pytest.fixture(scope="function")
+def system_test_data_subclasses(request, system_test_data):
+    """Fixture to add subclass hierarchies on demand."""
+    pkg, engine = system_test_data
+    
+    if not hasattr(request, 'param'):
+        return pkg, engine
+    
+    subclass_config = request.param
+    
+    if subclass_config == "medical_roles":
+        # Medical role hierarchy
+        for role in [medical_role, doctor_role, nurse_role]:
+            pkg.add((role, RDF.type, RDFS.Class))
+            if role != medical_role:
+                pkg.add((role, RDFS.subClassOf, medical_role))
+            else:
+                pkg.add((role, RDFS.subClassOf, BPO.Role))
+            pkg.add((role, RDFS.label, Literal(role.split('/')[-1])))
+        
+        # Create instances
+        pkg.add((medical_technician, RDF.type, medical_role))
+        pkg.add((medical_technician, RDFS.label, Literal('Medical Technician')))
+        
+        pkg.add((senior_doctor, RDF.type, doctor_role))
+        pkg.add((senior_doctor, RDFS.label, Literal('Senior Doctor')))
+        
+        pkg.add((junior_nurse, RDF.type, nurse_role))
+        pkg.add((junior_nurse, RDFS.label, Literal('Junior Nurse')))
+        
+    return pkg, engine
+
+@pytest.fixture(scope="function")
 def system_test_data(request):
     
     if hasattr(request, 'param'):
         config = request.param
     else:
-        config = {
-            "activity_pvs": [XSD.integer, XSD.float, XSD.string, XSD.boolean, BPO.Role, BPO.Activity]
-        }
+        config = {}
     
     system = KnowledgeGraphBPMS()
     pkg = system.pkg
     engine = system.engine
-    activity_pvs = config.get("activity_pvs", [])
-    create_subclasses = config.get("create_subclasses", False)
+    activity_pvs = config.get("activity_pvs", [XSD.integer, XSD.float, XSD.string, XSD.boolean, BPO.Role, BPO.Activity])
     
     
     pkg.bind("log", "http://example.org/", override = True)
@@ -71,8 +100,8 @@ def system_test_data(request):
         example_pv = _pv_for(type)
         pkg.add((example_pv , RDF.type, BPO.ProcessValue))
         pkg.add((example_pv, BPO.dataType, type))
-        for activity in activity_list:
-            if type in activity_pvs:
+        if type in activity_pvs:
+            for activity in activity_list:
                 pkg.add((activity, BPO.writesValue, example_pv))
 
     roles_curie_list = [':Doctor', ':Nurse', ':Admin']
@@ -80,29 +109,6 @@ def system_test_data(request):
         role_to_add = pkg.namespace_manager.expand_curie(curie)
         pkg.add((role_to_add, RDF.type, BPO.Role))
         pkg.add((role_to_add, RDFS.label, Literal(curie.split(':', 1)[1])))
-
-    # Create subclass instances if requested
-    if create_subclasses:
-        
-        # Define test subclasses
-        for role in [medical_role, doctor_role, nurse_role]:
-            pkg.add((role, RDF.type, RDFS.Class))
-            if role != medical_role:
-                pkg.add((role, RDFS.subClassOf, medical_role))
-            else:
-                pkg.add((role, RDFS.subClassOf, BPO.Role))
-            pkg.add((role, RDFS.label, Literal(role.split('/')[-1])))
-        
-        # Create instances of the subclasses
-        
-        pkg.add((medical_technician, RDF.type, medical_role))
-        pkg.add((medical_technician, RDFS.label, Literal('Medical Technician')))
-        
-        pkg.add((senior_doctor, RDF.type, doctor_role))
-        pkg.add((senior_doctor, RDFS.label, Literal('Senior Doctor')))
-        
-        pkg.add((junior_nurse, RDF.type, nurse_role))
-        pkg.add((junior_nurse, RDFS.label, Literal('Junior Nurse')))
 
     assert len(list(engine.open_decisions())) == 0, "Unexpected open decisions found"
     engine.open_new_case()
@@ -168,10 +174,11 @@ class TestBasicTaskExecution:
             actual_value = pkg.value(subject=case, predicate= _pv_for(dtype)).toPython()
             assert actual_value == expected_value, f"Expected {expected_value} ({type(expected_value).__name__}) for data type {dtype}, got {actual_value} ({type(actual_value).__name__})"
             
-    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role], "create_subclasses": True}], indirect=True)
-    def test_select_subclass_instances_as_entity_pvs(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    @pytest.mark.parametrize("system_test_data_subclasses", ["medical_roles"], indirect=True)
+    def test_select_subclass_instances_as_entity_pvs(self, system_test_data_subclasses, solara_test, page_session: playwright.sync_api.Page):
         """Test selecting subclass instances as process value entities."""
-        pkg, engine = system_test_data
+        pkg, engine = system_test_data_subclasses
         
         display(TaskExecutionUI(engine))
         
