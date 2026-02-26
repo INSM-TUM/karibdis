@@ -305,6 +305,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
                 if col_key not in [BPO.Activity]:
                     value_node = self.entity_instance_node(BPO.ProcessValue, col) # TODO clarify naming: is actually relation
                     self.add((value_node, RDF.type, BPO.ProcessValue))
+                    self.add((value_node, RDF.type, OWL.FunctionalProperty))
                     self.add((value_node, BPO.dataType , type_hint))
                     for activity in log[log[col].notnull()][activity_col].unique(): 
                         activity_node = self.activity_node(activity) 

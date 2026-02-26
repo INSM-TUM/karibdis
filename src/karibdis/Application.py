@@ -637,7 +637,7 @@ def TaskBody(engine, current_task_case, reload):
     attributes_to_show, set_attributes_to_show = reacton.use_state([])
     reacton.use_effect(lambda: set_attributes_to_show(list(pkg.objects(subject=activity, predicate=BPO.writesValue))), [current_task_case])
 
-    def add_pv_to_task(pv):
+    def add_all_pv_to_task(pv):
         # Make a defensive copy to prevent issues with state updates
         current_attributes = list(attributes_to_show)
         
@@ -650,8 +650,22 @@ def TaskBody(engine, current_task_case, reload):
         # For non-functional properties, always allow addition
         # Duplicate entity values are prevented in the UI dropdown filtering
         
-        new_attributes = current_attributes + [pv]
-        set_attributes_to_show(new_attributes)
+        # Check if this PV is already in the form
+        current_instances = current_attributes.count(pv)
+        
+        if current_instances == 0:
+            # PV not currently in form - use existing logic to show proper number of instances
+            current_case_values = list(pkg.objects(subject=current_case, predicate=pv))
+            required_instances = len(current_case_values) + 1  # existing + 1 new
+            instances_to_add = required_instances
+        else:
+            # PV already in form - just add one more instance
+            instances_to_add = 1
+        
+        for _ in range(instances_to_add):
+            current_attributes.append(pv)
+        
+        set_attributes_to_show(current_attributes)
             
                 
     def on_submit_click():
@@ -852,6 +866,40 @@ def TaskBody(engine, current_task_case, reload):
             set_original_case_values(new_originals)
         return handler
     
+    def on_delete_instance(attr, idx):
+        def handler(*_):
+            # Rebuild attributes list and remap all instance keys to their new positions.
+            # Because instance keys use absolute positions (f"{a}_{pos}"), removing one
+            # entry shifts every subsequent position down by 1 - so we must rename them.
+            new_attributes = []
+            new_instances = {}
+            for old_pos, a in enumerate(attributes_to_show):
+                if old_pos == idx:
+                    continue  # skip deleted instance
+                new_pos = len(new_attributes)
+                old_key = f"{a}_{old_pos}"
+                new_key = f"{a}_{new_pos}"
+                if old_key in attribute_instances:
+                    new_instances[new_key] = attribute_instances[old_key]
+                new_attributes.append(a)
+
+            # If no instances of attr remain, also clean tracking state
+            remaining = [a for a in new_attributes if a == attr]
+            if not remaining:
+                new_multi_select = set(multi_select_mode)
+                new_multi_select.discard(attr)
+                set_multi_select_mode(new_multi_select)
+                new_loaded = set(case_values_loaded)
+                new_loaded.discard(attr)
+                set_case_values_loaded(new_loaded)
+                new_originals = dict(original_case_values)
+                new_originals.pop(attr, None)
+                set_original_case_values(new_originals)
+            
+            set_attribute_instances(new_instances)
+            set_attributes_to_show(new_attributes)
+        return handler
+
     def on_widget_change(attr, instance_num):
         def handler(new_value):
             instance_id = f"{attr}_{instance_num}"
@@ -931,7 +979,11 @@ def TaskBody(engine, current_task_case, reload):
                 
                 with w.HBox(layout=w.Layout(padding='10px', border_bottom='1px solid #eee')):
                     # Attribute name column
-                    w.Label(value=attr_name, layout=w.Layout(width='200px'))
+                    with w.VBox(layout=w.Layout(width='200px')):
+                        w.Label(value=attr_name)
+                        if not is_functional:
+                            w.Button(description='+', layout=w.Layout(width='30px', height='30px'),
+                                     button_style='info', on_click=lambda *_, attr=attr: add_all_pv_to_task(attr))
                     
                     # Value column - different rendering based on type and instance count
                     with w.VBox(layout=w.Layout(width='400px')) as value_container:
@@ -1031,22 +1083,33 @@ def TaskBody(engine, current_task_case, reload):
                     w.Label(value=type_label, layout=w.Layout(width='150px'))
                     
                     # Delete button column
-                    delete_btn = w.Button(
-                        description='×', 
-                        layout=w.Layout(width='30px', height='30px', margin='0 5px'), 
-                        button_style='danger', 
-                        on_click=on_delete_attribute(attr)
-                    )
-                    w.Box(children=[delete_btn], layout=w.Layout(width='80px'))
+                    with w.VBox(layout=w.Layout(width='80px')):
+                        if is_functional or attr_type not in XSD:
+                            # Single delete-all button for functional/entity attrs
+                            w.Button(
+                                description='×',
+                                layout=w.Layout(width='36px', height='30px'),
+                                button_style='danger',
+                                on_click=on_delete_attribute(attr)
+                            )
+                        else:
+                            # Per-instance delete buttons aligned with each value row
+                            for idx in instance_indices:
+                                w.Button(
+                                    description='×',
+                                    layout=w.Layout(width='36px', height='30px'),
+                                    button_style='danger',
+                                    on_click=on_delete_instance(attr, idx)
+                                )
                 
             
-        AddProcessValueUI(pkg, attributes_to_show, multi_select_mode, add_pv_to_task) # TODO compute default should need to be a parameter?
+        AddProcessValueUI(pkg, attributes_to_show, add_all_pv_to_task) # TODO compute default should need to be a parameter?
         w.Button(description="Submit", on_click=on_submit_click, layout=w.Layout(flex='0 0 auto'))
                 
     return main
 
 @reacton.component
-def AddProcessValueUI(pkg, attributes, multi_select_mode, add_pv_to_task):
+def AddProcessValueUI(pkg, attributes, add_all_pv_to_task):
     
     open, set_open = reacton.use_state(False)
     remaining_options, set_remaining_options = reacton.use_state([])
@@ -1058,16 +1121,9 @@ def AddProcessValueUI(pkg, attributes, multi_select_mode, add_pv_to_task):
         new_options = []
         
         for pv in all_pvs:
-            is_functional = (pv, RDF.type, OWL.FunctionalProperty) in pkg
-            
-            if is_functional:
-                # Functional properties: only show if not already in attributes
-                if pv not in attributes:
-                    new_options.append((pkg.label(pv), pv))
-            else:
-                # Non-functional properties: always show unless in multi-select mode
-                if pv not in multi_select_mode: 
-                    new_options.append((pkg.label(pv), pv))
+            # Only show PVs not already present in the form
+            if pv not in attributes:
+                new_options.append((pkg.label(pv), pv))
         
         set_remaining_options(new_options)
         
@@ -1079,7 +1135,7 @@ def AddProcessValueUI(pkg, attributes, multi_select_mode, add_pv_to_task):
             set_selected_pv(None)
     
     # Update options when attributes change
-    reacton.use_effect(update_remaining_options, [attributes, multi_select_mode])
+    reacton.use_effect(update_remaining_options, [attributes])
     
     # Update selected PV
     def on_pv_change(new_pv):
@@ -1100,7 +1156,7 @@ def AddProcessValueUI(pkg, attributes, multi_select_mode, add_pv_to_task):
                     pv_to_add = selected_pv
                     set_open(False)              
                     try:
-                        add_pv_to_task(pv_to_add)
+                        add_all_pv_to_task(pv_to_add)
                     except Exception as e:
                         print(f"Error adding ProcessValue: {e}")
                         # Reopen dialog on error
