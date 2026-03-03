@@ -596,7 +596,6 @@ def GraphExplorationUI(graph): # TODO don't populate until shown
         w.Button(description="Reload Graph", on_click=lambda: set_reload(True))
     return main
 
-
 @reacton.component
 def TaskExecutionUI(engine): 
     tasks, set_tasks = reacton.use_state(list(engine.open_tasks()))
@@ -626,6 +625,10 @@ def TaskExecutionUI(engine):
 
 @reacton.component
 def TaskBody(engine, current_task_case, reload):
+    
+    # URIRef for empty entity values to differentiate from None values
+    _EMPTY_ENTITY = URIRef("urn:karibdis:empty")
+    
     pkg = engine.pkg
 
     current_task, current_case = current_task_case
@@ -636,6 +639,10 @@ def TaskBody(engine, current_task_case, reload):
     activity = next(pkg.objects(predicate = BPO.instanceOf, subject = current_task), None)
     attributes_to_show, set_attributes_to_show = reacton.use_state([])
     reacton.use_effect(lambda: set_attributes_to_show(list(pkg.objects(subject=activity, predicate=BPO.writesValue))), [current_task_case])
+
+    # Non-functional attrs whose graph values must be cleared on submit (deleted instances)
+    attributes_to_delete, set_attributes_to_delete = reacton.use_state(set())
+    reacton.use_effect(lambda: set_attributes_to_delete(set()), [current_task_case])
 
     def add_all_pv_to_task(pv):
         # Make a defensive copy to prevent issues with state updates
@@ -653,19 +660,22 @@ def TaskBody(engine, current_task_case, reload):
         # Check if this PV is already in the form
         current_instances = current_attributes.count(pv)
         
+        # Display existing instances plus one new instance for non-functional PVs 
         if current_instances == 0:
-            # PV not currently in form - use existing logic to show proper number of instances
             current_case_values = list(pkg.objects(subject=current_case, predicate=pv))
-            required_instances = len(current_case_values) + 1  # existing + 1 new
-            instances_to_add = required_instances
+            if is_functional:
+                instances_to_add = 1  # functional PVs always have exactly one instance
+            else:
+                instances_to_add = len(current_case_values) + 1  # existing + 1 new
         else:
-            # PV already in form - just add one more instance
             instances_to_add = 1
         
         for _ in range(instances_to_add):
             current_attributes.append(pv)
-        
+
         set_attributes_to_show(current_attributes)
+        # If the user is re-adding a PV instance they previously deleted, cancel the pending deletion.
+        set_attributes_to_delete(lambda prev: prev - {pv})
             
                 
     def on_submit_click():
@@ -690,46 +700,47 @@ def TaskBody(engine, current_task_case, reload):
                 if val is None:
                     val = compute_default_for(attr)
                     
-                if val is not None:
+                if val is not None and val != _EMPTY_ENTITY:
                     if is_entity:
                         pkg.set((current_case, attr, val))
                     else:
                         lit = Literal(val, datatype=attr_type if attr_type is not None else None)
                         pkg.set((current_case, attr, lit))
             else:
-                # Non-functional property: use pkg.add() for multiple values
-                if attr in multi_select_mode and is_entity:
-                    # Multi-select logic for entities clears existing values and sets only the selected ones
-                    existing_values = list(pkg.objects(subject=current_case, predicate=attr))
-                    for existing_val in existing_values:
-                        pkg.remove((current_case, attr, existing_val))
-                    
-                    
-                    current_selected_values = set()
-                    for idx in instance_indices:
-                        instance_id = f"{attr}_{idx}"
-                        val = attribute_instances.get(instance_id)
-                        if val is not None:
-                            current_selected_values.add(val)
-                            
-                    for val in current_selected_values:
+                # Non-functional property: clear-and-readd so modifications are reflected correctly.
+                existing_vals_fallback = load_existing_values_for(attr)
+
+                # Collect form values for all instances of this attribute with fallbacks for unchanged widgets
+                vals_to_write = []
+                for idx in instance_indices:
+                    instance_id = f"{attr}_{idx}"
+                    val = attribute_instances.get(instance_id)
+                    if val is None:
+                        instance_pos = instance_indices.index(idx)
+                        if instance_pos < len(existing_vals_fallback):
+                            val = existing_vals_fallback[instance_pos]
+                        elif not is_entity:
+                            val = compute_default_for(attr)
+                            # entities with None are skipped
+                    if val is not None and val != _EMPTY_ENTITY:
+                        vals_to_write.append(val)
+
+                # Replace graph values atomically
+                for ev in list(pkg.objects(subject=current_case, predicate=attr)):
+                    pkg.remove((current_case, attr, ev))
+                for val in vals_to_write:
+                    if is_entity:
                         pkg.add((current_case, attr, val))
-                else:
-                    for idx in instance_indices:
-                        instance_id = f"{attr}_{idx}"
-                        val = attribute_instances.get(instance_id)
-                        if val is None:
-                            if attr not in multi_select_mode:
-                                val = compute_default_for(attr)
-                            else:
-                                continue
-                        if val is not None:
-                            if is_entity:
-                                pkg.add((current_case, attr, val))
-                            else:
-                                lit = Literal(val, datatype=attr_type if attr_type is not None else None)
-                                pkg.add((current_case, attr, lit))
-                    
+                    else:
+                        pkg.add((current_case, attr, Literal(val, datatype=attr_type if attr_type is not None else None)))
+
+        # Clear graph values for PVs where every instance was deleted
+        processed_attrs = set(pv_instances.keys())
+        for attr in attributes_to_delete:
+            if attr not in processed_attrs:
+                for ev in list(pkg.objects(subject=current_case, predicate=attr)):
+                    pkg.remove((current_case, attr, ev))
+
         engine.complete_task(current_task)
         reload()
     
@@ -750,8 +761,7 @@ def TaskBody(engine, current_task_case, reload):
     def compute_default_for(attr):
         attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr))
         if attr_type not in XSD:
-            option_0 = next(options_for_entity_pv_type(attr_type), None)
-            return option_0 if option_0 else None
+            return _EMPTY_ENTITY  # Entity dropdowns default to "Select a value"
         if attr_type == XSD.integer:
             return 0
         if attr_type == XSD.float:
@@ -769,108 +779,42 @@ def TaskBody(engine, current_task_case, reload):
             grouped_attributes[attr] = []
         grouped_attributes[attr].append(i)
     
-    # Track attributes in multi-select mode
-    multi_select_mode, set_multi_select_mode = reacton.use_state(set())
-    
-    # Track initially loaded case values to prevent auto-reselection
-    case_values_loaded, set_case_values_loaded = reacton.use_state(set())
-    
-    # Track original case values to delete deselected values in multi-select mode
-    original_case_values, set_original_case_values = reacton.use_state({})
-    
-    # Update multi-select mode when non-functional entities have multiple instances
-    def update_multi_select_mode():
-        new_multi_select = set(multi_select_mode)
-        for attr, indices in grouped_attributes.items():
-            is_functional = (attr, RDF.type, OWL.FunctionalProperty) in pkg
-            attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
-            
-            if (not is_functional and 
-                attr_type not in XSD and 
-                len(indices) > 1):
-                new_multi_select.add(attr)
-        
-        set_multi_select_mode(new_multi_select)
-    
-    reacton.use_effect(update_multi_select_mode, [attributes_to_show])
-    
-    # Initialize case values for multi-select attributes on first load
-    def initialize_case_values():
-        new_loaded = set(case_values_loaded)
-        updated_instances = dict(attribute_instances)
-        updated_originals = dict(original_case_values)
-        
-        for attr, indices in grouped_attributes.items():
-            if attr in multi_select_mode and attr not in case_values_loaded:
-                # Load case values for this attribute
-                case_values = load_existing_values_for(attr)
-                if case_values:
-                    
-                    updated_originals[attr] = set(case_values)
-                    # Create a new list without current attribute instances
-                    new_attributes = []
-                    for a in attributes_to_show:
-                        if a != attr:
-                            new_attributes.append(a)
-                    
-                    # Find the original position of the attribute 
-                    attr_position = None
-                    for i, a in enumerate(attributes_to_show):
-                        if a == attr:
-                            attr_position = i
-                            break
-                    
-                    # Insert each instance while incrementing starting with the original position
-                    if attr_position is not None:
-                        for i, case_val in enumerate(case_values):
-                            new_attributes.insert(attr_position + i, attr)
-                            instance_id = f"{attr}_{attr_position + i}"
-                            updated_instances[instance_id] = case_val
-                    
-                    if len(case_values) != len(indices):
-                        set_attributes_to_show(new_attributes)
-                else:
-                    # No existing case values, but still mark as loaded
-                    updated_originals[attr] = set()
-                
-                new_loaded.add(attr)
-        
-        if new_loaded != case_values_loaded:
-            set_case_values_loaded(new_loaded)
-        if updated_instances != attribute_instances:
-            set_attribute_instances(updated_instances)
-        if updated_originals != original_case_values:
-            set_original_case_values(updated_originals)
-    
-    reacton.use_effect(initialize_case_values, [multi_select_mode])
-    
     def on_delete_attribute(attr):
+        # Red button: remove all instances from the form only; graph values are untouched.
+        # Clear any unsubmitted in-form changes to reset to existing graph values upon re-adding.
+        # Remap instance keys for all remaining attributes to their new positions.
         def handler(*_):
-            # Remove all instances of this attribute
             new_attributes = [a for a in attributes_to_show if a != attr]
+            new_instances = {}
+            new_pos = 0
+            for old_pos, a in enumerate(attributes_to_show):
+                if a == attr:
+                    continue  # dropped — skip, do not carry forward any cached value
+                old_key = f"{a}_{old_pos}"
+                new_key = f"{a}_{new_pos}"
+                if old_key in attribute_instances:
+                    new_instances[new_key] = attribute_instances[old_key]
+                new_pos += 1
             set_attributes_to_show(new_attributes)
-            
-            # Clear from multi-select mode tracking
-            new_multi_select = set(multi_select_mode)
-            new_multi_select.discard(attr)
-            set_multi_select_mode(new_multi_select)
-            
-            # Clear from case values loaded tracking
-            new_loaded = set(case_values_loaded)
-            new_loaded.discard(attr)
-            set_case_values_loaded(new_loaded)
-            
-            # Clear from original case values tracking
-            new_originals = dict(original_case_values)
-            new_originals.pop(attr, None)
-            set_original_case_values(new_originals)
+            set_attribute_instances(new_instances)
         return handler
-    
+
     def on_delete_instance(attr, idx):
         def handler(*_):
+            # Snapshot displayed values for all instances of attr that are not yet tracked. 
+            # Needed to preserve user changes which would be lost on re-render. 
+            existing_values = load_existing_values_for(attr)
+            attr_positions = [i for i, a in enumerate(attributes_to_show) if a == attr]
+            enriched = dict(attribute_instances)
+            for pos_in_attr, abs_pos in enumerate(attr_positions):
+                key = f"{attr}_{abs_pos}"
+                if key not in enriched:
+                    if pos_in_attr < len(existing_values):
+                        enriched[key] = existing_values[pos_in_attr]
+                    else:
+                        enriched[key] = compute_default_for(attr)
+
             # Rebuild attributes list and remap all instance keys to their new positions.
-            # Because instance keys use absolute positions (f"{a}_{pos}"), removing one
-            # entry shifts every subsequent position down by 1 - so we must rename them.
             new_attributes = []
             new_instances = {}
             for old_pos, a in enumerate(attributes_to_show):
@@ -879,23 +823,15 @@ def TaskBody(engine, current_task_case, reload):
                 new_pos = len(new_attributes)
                 old_key = f"{a}_{old_pos}"
                 new_key = f"{a}_{new_pos}"
-                if old_key in attribute_instances:
-                    new_instances[new_key] = attribute_instances[old_key]
+                if old_key in enriched:
+                    new_instances[new_key] = enriched[old_key]
                 new_attributes.append(a)
 
-            # If no instances of attr remain, also clean tracking state
+            # If no instances of attr remain, schedule its graph values for deletion on submit.
             remaining = [a for a in new_attributes if a == attr]
             if not remaining:
-                new_multi_select = set(multi_select_mode)
-                new_multi_select.discard(attr)
-                set_multi_select_mode(new_multi_select)
-                new_loaded = set(case_values_loaded)
-                new_loaded.discard(attr)
-                set_case_values_loaded(new_loaded)
-                new_originals = dict(original_case_values)
-                new_originals.pop(attr, None)
-                set_original_case_values(new_originals)
-            
+                set_attributes_to_delete(lambda prev: prev | {attr})
+
             set_attribute_instances(new_instances)
             set_attributes_to_show(new_attributes)
         return handler
@@ -906,63 +842,9 @@ def TaskBody(engine, current_task_case, reload):
             set_attribute_instances(lambda prev: {**(prev or {}), instance_id: new_value})
         return handler
     
-    def create_checkbox_handler(attr, option):
-        def handler(checked):
-            current_selected = set()
-            attr_instances = []
-            
-            # Find all current instances of this attribute and their positions
-            for i, a in enumerate(attributes_to_show):
-                if a == attr:
-                    attr_instances.append(i)
-                    instance_id = f"{attr}_{i}"
-                    val = attribute_instances.get(instance_id)
-                    if val:
-                        current_selected.add(val)
-            
-            # Update the set based on checkbox state
-            if checked:
-                current_selected.add(option)
-            else:
-                current_selected.discard(option)
-            
-            # Create new dict without instances of this attribute
-            updated_instances = {k: v for k, v in attribute_instances.items() 
-                               if not any(k == f"{attr}_{idx}" for idx in attr_instances)}
-            
-            # Preserve order: rebuild attributes_to_show maintaining positions and assign values
-            new_attributes = []
-            selected_values = list(current_selected)
-            num_instances = max(1, len(selected_values))  # Always keep at least 1 instance for the UI
-            
-            # Combined loop: rebuild the list and assign values simultaneously
-            attr_added = False
-            attr_value_index = 0
-            for i, a in enumerate(attributes_to_show):
-                if a == attr:
-                    # Add all attribute instances to new dict starting at the first occurrence position
-                    if not attr_added:
-                        for _ in range(num_instances):
-                            new_attributes.append(attr)
-                            # Assign value to this instance position
-                            instance_id = f"{attr}_{len(new_attributes) - 1}"
-                            if attr_value_index < len(selected_values):
-                                updated_instances[instance_id] = selected_values[attr_value_index]
-                            attr_value_index += 1
-                        attr_added = True
-                    # Skip other instances in the original list
-                else:
-                    new_attributes.append(a)
-            
-            set_attributes_to_show(new_attributes)
-            
-            set_attribute_instances(updated_instances)
-        return handler
-    
     with w.VBox() as main:  
         v.CardTitle(children=f'{pkg.label(activity)} for {engine.pkg.label(current_case)}')
         
-        # Header row with better styling
         with w.HBox(layout=w.Layout(padding='10px', background_color='#f5f5f5', border_bottom='2px solid #ddd')):
             w.Label(value='Attribute', layout=w.Layout(width='200px', font_weight='bold'))
             w.Label(value='Value', layout=w.Layout(width='400px', font_weight='bold'))
@@ -990,45 +872,40 @@ def TaskBody(engine, current_task_case, reload):
                         
                         if attr_type not in XSD:  # Entity type
                             options = list(options_for_entity_pv_type(attr_type))
-                            
-                            should_show_multiselect = (not is_functional and 
-                                                     (attr in multi_select_mode or len(instance_indices) > 1))
-                            
-                            if not should_show_multiselect:
-                                # Single dropdown for functional or single instance (not yet in multi-select mode)
+                            labels = [str(pkg.label(option)) for option in options]
+                            dropdown_options = list(zip(labels, options))
+                            options_with_empty = [("Select a value", _EMPTY_ENTITY)] + dropdown_options
+
+                            if is_functional:
+                                # Single dropdown, no grey delete button
                                 instance_id = f"{attr}_{instance_indices[0]}"
                                 default_value = attribute_instances.get(instance_id, load_existing_value_for(attr))
-                                
-                                labels = [str(pkg.label(option)) for option in options]
-                                dropdown_options = list(zip(labels, options))
-                                w.Dropdown(value=default_value, options=dropdown_options, 
-                                          layout=layout, on_value=on_widget_change(attr, instance_indices[0]))
+                                w.Dropdown(value=default_value, options=options_with_empty,
+                                           layout=layout, on_value=on_widget_change(attr, instance_indices[0]))
                             else:
-                                # Multi-select checkboxes for multiple non-functional instances
-                                existing_values = set()
-                                
-                                # Load from current attribute instances
+                                # One dropdown per instance with a grey delete button.
+                                existing_entity_vals = load_existing_values_for(attr)
+
                                 for idx in instance_indices:
                                     instance_id = f"{attr}_{idx}"
-                                    val = attribute_instances.get(instance_id)
-                                    if val:
-                                        existing_values.add(val)
-                                
-                                # Only load case values if not already loaded (prevents auto-reselection)
-                                if attr not in case_values_loaded:
-                                    case_values = load_existing_values_for(attr)
-                                    for case_val in case_values:
-                                        existing_values.add(case_val)
-                                
-                                # Create checkboxes for each option
-                                for option in options:
-                                    is_selected = option in existing_values
-                                    checkbox = w.Checkbox(
-                                        description=str(pkg.label(option)), 
-                                        value=is_selected,
-                                        on_value=create_checkbox_handler(attr, option)
-                                    )
-                                    w.Box(children=[checkbox], layout=w.Layout(margin='2px 0'))
+                                    instance_pos = instance_indices.index(idx)
+
+                                    if instance_id in attribute_instances:
+                                        default_value = attribute_instances[instance_id]
+                                    elif instance_pos < len(existing_entity_vals):
+                                        default_value = existing_entity_vals[instance_pos]
+                                    else:
+                                        default_value = _EMPTY_ENTITY  # new empty instance
+
+                                    with w.HBox(layout=w.Layout(margin='2px 0')):
+                                        w.Dropdown(value=default_value, options=options_with_empty,
+                                                   layout=w.Layout(margin='2px 0', width='350px'),
+                                                   on_value=on_widget_change(attr, idx))
+                                        w.Button(description='×',
+                                                 layout=w.Layout(width='28px', height='28px'),
+                                                 button_style='',
+                                                 style=w.ButtonStyle(button_color='#d0d0d0'),
+                                                 on_click=on_delete_instance(attr, idx))
                         
                         else:  # Non-entity types
                             for idx in instance_indices:
@@ -1064,7 +941,18 @@ def TaskBody(engine, current_task_case, reload):
                                     widget = w.Text(value=default_value, placeholder=placeholder,
                                                    layout=widget_layout, on_value=on_widget_change(attr, idx))
                                 
-                                w.Box(children=[widget], layout=w.Layout(margin='2px 0'))
+                                if not is_functional:
+                                    with w.HBox(layout=w.Layout(margin='2px 0')):
+                                        w.Box(children=[widget])
+                                        w.Button(
+                                            description='×',
+                                            layout=w.Layout(width='28px', height='28px'),
+                                            button_style='',
+                                            style=w.ButtonStyle(button_color='#d0d0d0'),
+                                            on_click=on_delete_instance(attr, idx)
+                                        )
+                                else:
+                                    w.Box(children=[widget], layout=w.Layout(margin='2px 0'))
                     
                     # Type label column
                     if attr_type not in XSD:
@@ -1084,23 +972,12 @@ def TaskBody(engine, current_task_case, reload):
                     
                     # Delete button column
                     with w.VBox(layout=w.Layout(width='80px')):
-                        if is_functional or attr_type not in XSD:
-                            # Single delete-all button for functional/entity attrs
-                            w.Button(
-                                description='×',
-                                layout=w.Layout(width='36px', height='30px'),
-                                button_style='danger',
-                                on_click=on_delete_attribute(attr)
-                            )
-                        else:
-                            # Per-instance delete buttons aligned with each value row
-                            for idx in instance_indices:
-                                w.Button(
-                                    description='×',
-                                    layout=w.Layout(width='36px', height='30px'),
-                                    button_style='danger',
-                                    on_click=on_delete_instance(attr, idx)
-                                )
+                        w.Button(
+                            description='×',
+                            layout=w.Layout(width='36px', height='30px'),
+                            button_style='danger',
+                            on_click=on_delete_attribute(attr)
+                        )
                 
             
         AddProcessValueUI(pkg, attributes_to_show, add_all_pv_to_task) # TODO compute default should need to be a parameter?

@@ -141,9 +141,7 @@ class TestBasicTaskExecution:
             XSD.integer: 0,
             XSD.float: 0.0,
             XSD.string: "",
-            XSD.boolean: False,
-            BPO.Role: 'http://infs.cit.tum.de/karibdis/baseontology/Doctor',
-            BPO.Activity: 'http://example.org/Activity_CRP'}
+            XSD.boolean: False}
         
         for dtype, expected_value in expected_defaults.items():
             actual_value = pkg.value(subject=case, predicate= _pv_for(dtype)).toPython()
@@ -412,6 +410,438 @@ class TestProcessValueManagement:
         expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
         expect(page_session.locator('input:right-of(:text("ProcessValue_string"))').first).to_have_value("First Task Value")
 
+class TestFunctionalProcessValues:
+    """Test cases for functional vs non-functional process value behavior."""
+    
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    def test_functional_pv_single_instance_only(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that functional PVs have no + button and stay at exactly one instance."""
+        pkg, engine = system_test_data
+
+        role_pv = _pv_for(BPO.Role)
+        pkg.add((role_pv, RDF.type, OWL.FunctionalProperty))
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        # Functional PVs should not display a + button
+        expect(page_session.locator('button:below(:text("ProcessValue_Role")):has-text("+")')).to_have_count(0)
+
+        # Exactly one value dropdown for the single functional instance
+        expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))')).to_have_count(1)
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    def test_functional_pv_value_is_overridden_on_complete(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that completing a task with a functional PV overrides (not appends) any existing case value."""
+        pkg, engine = system_test_data
+
+        role_pv = _pv_for(BPO.Role)
+        pkg.add((role_pv, RDF.type, OWL.FunctionalProperty))
+
+        doctor = URIRef('http://infs.cit.tum.de/karibdis/baseontology/Doctor')
+        admin = URIRef('http://infs.cit.tum.de/karibdis/baseontology/Admin')
+        pkg.add((case, role_pv, doctor))
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        # Existing value is pre-loaded
+        expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))').first).to_have_value(pkg.label(doctor))
+
+        page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(pkg.label(admin))
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+
+        assigned = list(pkg.objects(subject=case, predicate=role_pv))
+        assert len(assigned) == 1
+        assert admin in assigned
+
+
+class TestEntityMultipleValuesFunctionality:
+    """Tests for non-functional entity PVs using per-instance dropdowns (no checkboxes)."""
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    @pytest.mark.parametrize("system_test_data_subclasses", ["medical_roles"], indirect=True)
+    def test_multiple_instances_show_multiple_dropdowns(self, system_test_data_subclasses, solara_test, page_session: playwright.sync_api.Page):
+        """Clicking + adds a second dropdown for the same entity PV"""
+        pkg, engine = system_test_data_subclasses
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        role_selects = page_session.locator('select:right-of(:text("ProcessValue_Role"))')
+        expect(role_selects).to_have_count(1)
+
+        page_session.locator('button:below(:text("ProcessValue_Role")):has-text("+")').first.click()
+
+        expect(role_selects).to_have_count(2)
+        expect(page_session.locator('input[type="checkbox"]:right-of(:text("ProcessValue_Role"))')).to_have_count(0)
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    @pytest.mark.parametrize("system_test_data_subclasses", ["medical_roles"], indirect=True)
+    def test_multiple_entity_values_saved(self, system_test_data_subclasses, solara_test, page_session: playwright.sync_api.Page):
+        """Values set across multiple entity instance dropdowns are all saved to the graph."""
+        pkg, engine = system_test_data_subclasses
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        role_selects = page_session.locator('select:right-of(:text("ProcessValue_Role"))')
+        role_selects.first.select_option("Senior Doctor")
+
+        page_session.locator('button:below(:text("ProcessValue_Role")):has-text("+")').first.click()
+        role_selects.nth(1).select_option("Junior Nurse")
+
+        page_session.locator('button:below(:text("ProcessValue_Role")):has-text("+")').first.click()
+        role_selects.nth(2).select_option("Medical Technician")
+
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+
+        role_pv = _pv_for(BPO.Role)
+        assigned_roles = list(pkg.objects(subject=case, predicate=role_pv))
+        assert len(assigned_roles) == 3
+        assert senior_doctor in assigned_roles
+        assert junior_nurse in assigned_roles
+        assert medical_technician in assigned_roles
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.integer]}], indirect=True)
+    @pytest.mark.parametrize("system_test_data_subclasses", ["medical_roles"], indirect=True)
+    def test_existing_entity_values_loaded_as_dropdowns(self, system_test_data_subclasses, solara_test, page_session: playwright.sync_api.Page):
+        """Pre-existing case values appear pre-filled in dropdowns with an extra empty instance added."""
+        pkg, engine = system_test_data_subclasses
+
+        role_pv = _pv_for(BPO.Role)
+        pkg.add((case, role_pv, senior_doctor))
+        pkg.add((case, role_pv, junior_nurse))
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        # add_all_pv_to_task sees 2 existing instances and adds a third empty one for new input
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_Role")
+        page_session.get_by_role("button", name="Create").click()
+
+        role_selects = page_session.locator('select:right-of(:text("ProcessValue_Role"))')
+        expect(role_selects).to_have_count(3)
+
+        # Submit without changes so empty instance should be skipped.
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+
+        assigned_roles = list(pkg.objects(subject=case, predicate=role_pv))
+        assert len(assigned_roles) == 2
+        assert senior_doctor in assigned_roles
+        assert junior_nurse in assigned_roles
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.integer]}], indirect=True)
+    @pytest.mark.parametrize("system_test_data_subclasses", ["medical_roles"], indirect=True)
+    def test_grey_delete_entity_instance_removed_from_graph(self, system_test_data_subclasses, solara_test, page_session: playwright.sync_api.Page):
+        """Grey-deleting a pre-filled entity dropdown removes that value from the graph on submit."""
+        pkg, engine = system_test_data_subclasses
+
+        role_pv = _pv_for(BPO.Role)
+        pkg.add((case, role_pv, senior_doctor))
+        pkg.add((case, role_pv, junior_nurse))
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_Role")
+        page_session.get_by_role("button", name="Create").click()
+
+        #Creates one empty instance which is not saved
+        role_selects = page_session.locator('select:right-of(:text("ProcessValue_Role"))')
+        expect(role_selects).to_have_count(3)
+        
+
+        # Grey-delete the first instance
+        page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_Role")):has-text("×")').first.click()
+        expect(role_selects).to_have_count(2)
+
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+
+        # One instance removed, empty one skipped
+        assigned_roles = list(pkg.objects(subject=case, predicate=role_pv))
+        assert len(assigned_roles) == 1 
+
+class TestProcessValueDeletion:
+    """Test cases for deleting entire process value rows."""
+    
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.string, XSD.integer]}], indirect=True)
+    def test_delete_single_pv_row(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test deleting a single process value row."""
+        pkg, engine = system_test_data
+        
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+        
+        # Initially should have string and integer PVs
+        expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+        expect(page_session.get_by_text("ProcessValue_integer")).to_be_visible()
+        
+        # Delete the string PV
+        page_session.locator('button.mod-danger:right-of(:text("ProcessValue_string"))').first.click()
+        
+        # String PV should be gone, integer should remain
+        expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
+        expect(page_session.get_by_text("ProcessValue_integer")).to_be_visible()
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    def test_delete_entity_pv_row(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that the red button removes an entity PV row entirely from the form."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        # Add a second instance so there are two dropdowns before deletion
+        page_session.locator('button:below(:text("ProcessValue_Role")):has-text("+")').first.click()
+        expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))')).to_have_count(2)
+
+        # Red button removes the entire row
+        page_session.locator('button.mod-danger:right-of(:text("ProcessValue_Role"))').first.click()
+
+        expect(page_session.get_by_text("ProcessValue_Role")).not_to_be_visible()
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    def test_delete_and_readd_fresh_behavior(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that deleting and re-adding a PV starts fresh with a single empty dropdown."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        # Add a second instance, then delete entire row via red button
+        page_session.locator('button:below(:text("ProcessValue_Role")):has-text("+")').first.click()
+        expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))')).to_have_count(2)
+        page_session.locator('select:right-of(:text("ProcessValue_Role"))').first.select_option(pkg.label(basic_test_values[BPO.Role]))
+        
+
+        page_session.locator('button.mod-danger:right-of(:text("ProcessValue_Role"))').first.click()
+
+        # Re-add via AddPVUI
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_Role")
+        page_session.get_by_role("button", name="Create").click()
+
+        # Fresh instance should be added, old values should not persist, and there should only be one dropdown
+        expect(page_session.locator('select:right-of(:text("ProcessValue_Role"))')).to_have_count(1)
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.string, XSD.integer, BPO.Role]}], indirect=True)
+    def test_delete_preserves_other_rows_order(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that deleting a row preserves the order of other rows."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+        expect(page_session.get_by_text("ProcessValue_integer")).to_be_visible()
+        expect(page_session.get_by_text("ProcessValue_Role")).to_be_visible()
+
+        # Delete the middle PV (integer)
+        page_session.locator('button.mod-danger:right-of(:text("ProcessValue_integer"))').first.click()
+
+        # String and Role should still be visible, integer gone
+        expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+        expect(page_session.get_by_text("ProcessValue_integer")).not_to_be_visible()
+        expect(page_session.get_by_text("ProcessValue_Role")).to_be_visible()
+
+        # String must still appear before Role in the page
+        string_pos = page_session.get_by_text("ProcessValue_string").bounding_box()["y"]
+        role_pos = page_session.get_by_text("ProcessValue_Role").first.bounding_box()["y"]
+        assert string_pos < role_pos
+
+
+class TestNonEntityMultipleValues:
+    """Test cases for non-entity types with multiple input fields."""
+    
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.string]}], indirect=True)
+    def test_multiple_string_inputs_in_same_row(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that multiple instances of non-entity PVs show multiple input fields in the same row."""
+        pkg, engine = system_test_data
+        
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+        
+        # Should initially have one string input
+        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+        expect(string_inputs).to_have_count(1)
+        
+        # Add two more instances via + button
+        page_session.locator('button:below(:text("ProcessValue_string")):has-text("+")').first.click()
+        page_session.locator('button:below(:text("ProcessValue_string")):has-text("+")').first.click()
+        
+        # Should now have 3 string inputs in the same row
+        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+        expect(string_inputs).to_have_count(3)
+        
+        # Fill different values in each input
+        string_inputs.nth(0).fill("First Value")
+        string_inputs.nth(1).fill("Second Value")
+        string_inputs.nth(2).fill("Third Value")
+        
+        # Submit and verify all values are saved
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+        
+        string_pv = _pv_for(XSD.string)
+        assigned_strings = [str(val) for val in pkg.objects(subject=case, predicate=string_pv)]
+        assert "First Value" in assigned_strings
+        assert "Second Value" in assigned_strings
+        assert "Third Value" in assigned_strings
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    def test_existing_non_entity_values_displayed_and_removable(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Test that pre-existing non-entity case values are displayed as inputs and individual ones can be removed."""
+        pkg, engine = system_test_data
+
+        str_pv = _pv_for(XSD.string)
+        pkg.add((case, str_pv, Literal("keep", datatype=XSD.string)))
+        pkg.add((case, str_pv, Literal("remove_me", datatype=XSD.string)))
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        # Add string PV to load existing values
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.get_by_role("button", name="Create").click()
+
+        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+        expect(string_inputs).to_have_count(3) # 2 existing + 1 new empty
+
+        # Remove the instance with value "remove_me"
+        remove_idx = next(
+            i for i in range(3)
+            if string_inputs.nth(i).input_value() == "remove_me"
+        )
+        page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_string")):has-text("×")').nth(remove_idx).click()
+        expect(string_inputs).to_have_count(2)
+
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+
+        assigned = [str(v) for v in pkg.objects(subject=case, predicate=str_pv)]
+        assert "keep" in assigned
+        assert "remove_me" not in assigned
+
+
+class TestPerInstanceDeletion:
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.string]}], indirect=True)
+    def test_per_instance_delete_removes_one_instance(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """Instance delete at index N removes only that instance; the row and remaining instances are preserved."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        page_session.locator('button:below(:text("ProcessValue_string")):has-text("+")').first.click()
+        page_session.locator('button:below(:text("ProcessValue_string")):has-text("+")').first.click()
+
+        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+        expect(string_inputs).to_have_count(3)
+
+        # Delete the second instance
+        page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_string")):has-text("×")').nth(1).click()
+
+        expect(string_inputs).to_have_count(2)
+        expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.string]}], indirect=True)
+    def test_per_instance_delete_remapping_preserves_values_and_order(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """After deleting instance 0, the remaining instances submit with correct values."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        page_session.locator('button:below(:text("ProcessValue_string")):has-text("+")').first.click()
+        page_session.locator('button:below(:text("ProcessValue_string")):has-text("+")').first.click()
+
+        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+        string_inputs.nth(0).fill("Alpha")
+        string_inputs.nth(1).fill("Beta")
+        string_inputs.nth(2).fill("Gamma")
+
+        # Delete instance 1 (Beta)
+        page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_string")):has-text("×")').nth(1).click()
+
+        # Verify the remaining values and their order 
+        expect(string_inputs).to_have_count(2)
+        expect(string_inputs.nth(0)).to_have_value("Alpha")
+        expect(string_inputs.nth(1)).to_have_value("Gamma")
+        alpha_y = string_inputs.nth(0).bounding_box()["y"]
+        gamma_y = string_inputs.nth(1).bounding_box()["y"]
+        assert alpha_y < gamma_y
+
+        page_session.get_by_role("button", name="Submit").click()
+        _wait_for_task(engine, 0)
+        
+        assigned = [str(v) for v in pkg.objects(subject=case, predicate=_pv_for(XSD.string))]
+        assert "Alpha" in assigned
+        assert "Gamma" in assigned
+        assert "Beta" not in assigned
+
+class TestAddPVFiltering:
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role, XSD.string]}], indirect=True)
+    def test_dialog_excludes_pvs_already_in_form(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """PVs in attributes_to_show are absent from the AddProcessValueUI dropdown."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        dropdown = page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first
+        expect(dropdown).not_to_contain_text("ProcessValue_Role")
+        expect(dropdown).not_to_contain_text("ProcessValue_string")
+        expect(dropdown).to_contain_text("ProcessValue_integer")
+        page_session.get_by_role("button", name="Cancel").click()
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [XSD.string]}], indirect=True)
+    def test_dialog_shows_pv_after_deletion(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """After deleting a PV from the form it reappears in the AddProcessValueUI dropdown."""
+        pkg, engine = system_test_data
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        page_session.locator('button.mod-danger:right-of(:text("ProcessValue_string"))').first.click()
+        expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
+
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        expect(page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first).to_contain_text("ProcessValue_string")
+        page_session.get_by_role("button", name="Cancel").click()
+
+    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    def test_add_pv_with_existing_case_values_shows_n_plus_one_inputs(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+        """When a PV not in the form has N existing case values, adding it creates N+1 inputs."""
+        pkg, engine = system_test_data
+
+        str_pv = _pv_for(XSD.string)
+        pkg.add((case, str_pv, Literal("existing1", datatype=XSD.string)))
+        pkg.add((case, str_pv, Literal("existing2", datatype=XSD.string)))
+
+        display(TaskExecutionUI(engine))
+        page_session.get_by_role("button", name="Reload Tasks").click()
+
+        page_session.get_by_role("button", name="Add new ProcessValue").click()
+        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.get_by_role("button", name="Create").click()
+
+        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+        expect(string_inputs).to_have_count(3)
+        expect(string_inputs.nth(0)).to_have_value("existing1")
+        expect(string_inputs.nth(1)).to_have_value("existing2")
+        expect(string_inputs.nth(2)).to_have_value("")
 
 
 # ===== HELPER FUNCTIONS =====
