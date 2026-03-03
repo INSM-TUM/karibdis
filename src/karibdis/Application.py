@@ -644,32 +644,37 @@ def TaskBody(engine, current_task_case, reload):
     attributes_to_delete, set_attributes_to_delete = reacton.use_state(set())
     reacton.use_effect(lambda: set_attributes_to_delete(set()), [current_task_case])
 
+    # Entity non-functional PVs whose inline add-menu is currently open
+    entity_add_menu_open, set_entity_add_menu_open = reacton.use_state(set())
+    reacton.use_effect(lambda: set_entity_add_menu_open(set()), [current_task_case])
+
     def add_all_pv_to_task(pv):
         # Make a defensive copy to prevent issues with state updates
         current_attributes = list(attributes_to_show)
-        
+
         is_functional = (pv, RDF.type, OWL.FunctionalProperty) in pkg
-        
+        attr_type = next(pkg.objects(predicate=BPO.dataType, subject=pv), None)
+        is_entity = attr_type is not None and attr_type not in XSD
+
         if is_functional:
             if pv in current_attributes:
                 return
-        
-        # For non-functional properties, always allow addition
-        # Duplicate entity values are prevented in the UI dropdown filtering
-        
+
         # Check if this PV is already in the form
         current_instances = current_attributes.count(pv)
-        
-        # Display existing instances plus one new instance for non-functional PVs 
+
         if current_instances == 0:
             current_case_values = list(pkg.objects(subject=current_case, predicate=pv))
             if is_functional:
                 instances_to_add = 1  # functional PVs always have exactly one instance
+            elif is_entity:
+                # Load existing values, add blank placeholder only when none exist
+                instances_to_add = len(current_case_values) if current_case_values else 1
             else:
                 instances_to_add = len(current_case_values) + 1  # existing + 1 new
         else:
             instances_to_add = 1
-        
+
         for _ in range(instances_to_add):
             current_attributes.append(pv)
 
@@ -797,6 +802,7 @@ def TaskBody(engine, current_task_case, reload):
                 new_pos += 1
             set_attributes_to_show(new_attributes)
             set_attribute_instances(new_instances)
+            set_entity_add_menu_open(lambda prev: prev - {attr})
         return handler
 
     def on_delete_instance(attr, idx):
@@ -841,7 +847,32 @@ def TaskBody(engine, current_task_case, reload):
             instance_id = f"{attr}_{instance_num}"
             set_attribute_instances(lambda prev: {**(prev or {}), instance_id: new_value})
         return handler
-    
+
+    def on_add_entity_select(attr):
+        #Handler for when a value is chosen in the inline add-menu dropdown.
+        def handler(new_value):
+            if new_value is None or new_value == _EMPTY_ENTITY:
+                return
+            new_idx = len(attributes_to_show)
+            set_attributes_to_show(attributes_to_show + [attr])
+            set_attribute_instances(lambda prev: {**(prev or {}), f"{attr}_{new_idx}": new_value})
+            set_entity_add_menu_open(lambda prev: prev - {attr})
+            set_attributes_to_delete(lambda prev: prev - {attr})
+        return handler
+
+    def open_entity_add_menu(attr):
+        # Open the inline add-menu for an entity PV if not already open.
+        def handler(*_):
+            if attr not in entity_add_menu_open:
+                set_entity_add_menu_open(lambda prev: prev | {attr})
+        return handler
+
+    def close_entity_add_menu(attr):
+        # Close the inline add-menu for an entity PV.
+        def handler(*_):
+            set_entity_add_menu_open(lambda prev: prev - {attr})
+        return handler
+
     with w.VBox() as main:  
         v.CardTitle(children=f'{pkg.label(activity)} for {engine.pkg.label(current_case)}')
         
@@ -858,14 +889,21 @@ def TaskBody(engine, current_task_case, reload):
                 is_functional = (attr, RDF.type, OWL.FunctionalProperty) in pkg
                 attr_type = next(pkg.objects(predicate=BPO.dataType, subject=attr), None)
                 attr_name = pkg.label(attr)
-                
+                is_entity = attr_type is not None and attr_type not in XSD
+
                 with w.HBox(layout=w.Layout(padding='10px', border_bottom='1px solid #eee')):
                     # Attribute name column
                     with w.VBox(layout=w.Layout(width='200px')):
                         w.Label(value=attr_name)
                         if not is_functional:
-                            w.Button(description='+', layout=w.Layout(width='30px', height='30px'),
-                                     button_style='info', on_click=lambda *_, attr=attr: add_all_pv_to_task(attr))
+                            # Entity PVs: "+" opens the inline add-menu in the value column.
+                            # Non-entity PVs: "+" appends a new blank input row.
+                            if is_entity:
+                                w.Button(description='+', layout=w.Layout(width='30px', height='30px'),
+                                         button_style='info', on_click=open_entity_add_menu(attr))
+                            else:
+                                w.Button(description='+', layout=w.Layout(width='30px', height='30px'),
+                                         button_style='info', on_click=lambda *_, attr=attr: add_all_pv_to_task(attr))
                     
                     # Value column - different rendering based on type and instance count
                     with w.VBox(layout=w.Layout(width='400px')) as value_container:
@@ -883,29 +921,63 @@ def TaskBody(engine, current_task_case, reload):
                                 w.Dropdown(value=default_value, options=options_with_empty,
                                            layout=layout, on_value=on_widget_change(attr, instance_indices[0]))
                             else:
-                                # One dropdown per instance with a grey delete button.
+                                # Chip-based display for non-functional entity PVs.
                                 existing_entity_vals = load_existing_values_for(attr)
 
+                                # Determine which instances have existing values to display as chips.
+                                visible_instances = []
                                 for idx in instance_indices:
                                     instance_id = f"{attr}_{idx}"
                                     instance_pos = instance_indices.index(idx)
-
                                     if instance_id in attribute_instances:
-                                        default_value = attribute_instances[instance_id]
+                                        chip_value = attribute_instances[instance_id]
                                     elif instance_pos < len(existing_entity_vals):
-                                        default_value = existing_entity_vals[instance_pos]
+                                        chip_value = existing_entity_vals[instance_pos]
                                     else:
-                                        default_value = _EMPTY_ENTITY  # new empty instance
+                                        chip_value = _EMPTY_ENTITY  # blank placeholder slot
+                                    if chip_value != _EMPTY_ENTITY:
+                                        visible_instances.append((idx, chip_value))
 
-                                    with w.HBox(layout=w.Layout(margin='2px 0')):
-                                        w.Dropdown(value=default_value, options=options_with_empty,
-                                                   layout=w.Layout(margin='2px 0', width='350px'),
-                                                   on_value=on_widget_change(attr, idx))
-                                        w.Button(description='×',
-                                                 layout=w.Layout(width='28px', height='28px'),
-                                                 button_style='',
-                                                 style=w.ButtonStyle(button_color='#d0d0d0'),
-                                                 on_click=on_delete_instance(attr, idx))
+                                has_chips = len(visible_instances) > 0
+                                # Menu is open if explicitly opened by the user, or auto-shown when empty.
+                                menu_open = attr in entity_add_menu_open or not has_chips
+
+                                # Build add-menu options, filtering out already-displayed values.
+                                already_selected = {v for _, v in visible_instances}
+                                available_options = [("Select a value", _EMPTY_ENTITY)] + [
+                                    (lbl, val) for lbl, val in dropdown_options if val not in already_selected
+                                ]
+
+                                with w.VBox():
+                                    for idx, chip_value in visible_instances:
+                                        with w.HBox(layout=w.Layout(margin='2px 0')):
+                                            w.Label(value=str(pkg.label(chip_value)),
+                                                    layout=w.Layout(width='322px'))
+                                            w.Button(
+                                                description='×',
+                                                layout=w.Layout(width='28px', height='28px'),
+                                                button_style='',
+                                                style=w.ButtonStyle(button_color='#d0d0d0'),
+                                                on_click=on_delete_instance(attr, idx),
+                                            )
+
+                                    # Add-menu: auto-opens when no values; toggled via "+" in name column.
+                                    if menu_open:
+                                        with w.HBox(layout=w.Layout(margin='2px 0',
+                                                                     align_items='center')):
+                                            w.Dropdown(
+                                                value=_EMPTY_ENTITY,
+                                                options=available_options,
+                                                layout=w.Layout(width='322px'),
+                                                on_value=on_add_entity_select(attr),
+                                            )
+                                            if has_chips:
+                                                w.Button(
+                                                    description='Close',
+                                                    layout=w.Layout(width='60px', height='28px'),
+                                                    button_style='',
+                                                    on_click=close_entity_add_menu(attr),
+                                                )
                         
                         else:  # Non-entity types
                             for idx in instance_indices:
