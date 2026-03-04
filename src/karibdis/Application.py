@@ -231,7 +231,7 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
             filename = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
             with open(filename, 'wb') as f:
                 f.write(file.content)
-                #_log = pm4py.read_xes(f.name) # TODO also support csv at some point
+                _log = pm4py.read_xes(f.name) # TODO also support csv at some point
             set_log(_log)
         
         w.FileUpload(
@@ -315,7 +315,7 @@ def DiscoveryUI(importer, log, run_extraction):
         
         def discover():
             # TODO take specified activity column (etc.) from importer
-            #_declare = pm4py.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio)
+            _declare = pm4py.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio)
             set_declare(_declare)
 
         v.Slider(
