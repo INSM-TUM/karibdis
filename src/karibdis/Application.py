@@ -1092,13 +1092,13 @@ def AddProcessValueUI(pkg, attributes, add_all_pv_to_task):
 
     with w.VBox() as main:
         if len(remaining_options) == 0:
-            w.Label(value="No other ProcessValues available to add.")
+            w.Label(value="No other process values available to add.")
         elif not open:
-            w.Button(description="Add new ProcessValue", on_click=lambda *_: set_open(True))
+            w.Button(description="Add new process value", on_click=lambda *_: set_open(True))
         else:
             # Show form only if there are options and selected_pv is set
             if remaining_options and selected_pv is not None:
-                w.Label(value="Add a new ProcessValue to this case")
+                w.Label(value="Add a new process value to this case")
                 w.Dropdown(options=remaining_options, value=selected_pv, on_value=on_pv_change)
 
                 def _add_to_pkg(b=None):

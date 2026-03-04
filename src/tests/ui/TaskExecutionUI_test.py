@@ -345,17 +345,17 @@ class TestProcessValueManagement:
         expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
         expect(page_session.get_by_text("ProcessValue_float")).not_to_be_visible()
         
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        expect(page_session.get_by_text("Add a new ProcessValue to this case")).to_be_visible()
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        expect(page_session.get_by_text("Add a new process value to this case")).to_be_visible()
         
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
         page_session.get_by_role("button", name="Create").click()
         
-        expect(page_session.get_by_text("Add a new ProcessValue to this case")).not_to_be_visible()
+        expect(page_session.get_by_text("Add a new process value to this case")).not_to_be_visible()
         expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
         
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_float")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_float")
         page_session.get_by_role("button", name="Create").click()
         
         expect(page_session.get_by_text("ProcessValue_float")).to_be_visible()
@@ -382,8 +382,8 @@ class TestProcessValueManagement:
         page_session.get_by_role("button", name="Reload Tasks").click()
         
         # Add ProcessValue_string for the first task
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
         page_session.get_by_role("button", name="Create").click()
         
         expect(page_session.get_by_text("ProcessValue_string")).to_be_visible()
@@ -402,8 +402,8 @@ class TestProcessValueManagement:
         expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
         
         # Add ProcessValue_string again for the second task
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
         page_session.get_by_role("button", name="Create").click()
         
         # Verify it now appears and shows the existing value from the case
@@ -529,8 +529,8 @@ class TestEntityMultipleValuesFunctionality:
         display(TaskExecutionUI(engine))
         page_session.get_by_role("button", name="Reload Tasks").click()
 
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_Role")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_Role")
         page_session.get_by_role("button", name="Create").click()
         
         instance_deletes = page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_Role")):has-text("×")')
@@ -559,8 +559,8 @@ class TestEntityMultipleValuesFunctionality:
         display(TaskExecutionUI(engine))
         page_session.get_by_role("button", name="Reload Tasks").click()
 
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_Role")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_Role")
         page_session.get_by_role("button", name="Create").click()
 
         # Two label rows for the existing values
@@ -634,8 +634,8 @@ class TestProcessValueDeletion:
         page_session.locator('button.mod-danger:right-of(:text("ProcessValue_Role"))').first.click()
 
         # Re-add via AddPVUI
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_Role")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_Role")
         page_session.get_by_role("button", name="Create").click()
 
         # Fresh state with add-menu auto-shown and prior selections not preserved.
@@ -719,8 +719,8 @@ class TestNonEntityMultipleValues:
         page_session.get_by_role("button", name="Reload Tasks").click()
 
         # Add string PV to load existing values
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
         page_session.get_by_role("button", name="Create").click()
 
         string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
@@ -809,8 +809,8 @@ class TestAddPVFiltering:
         display(TaskExecutionUI(engine))
         page_session.get_by_role("button", name="Reload Tasks").click()
 
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        dropdown = page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        dropdown = page_session.locator('select:below(:text("Add a new process value to this case"))').first
         expect(dropdown).not_to_contain_text("ProcessValue_Role")
         expect(dropdown).not_to_contain_text("ProcessValue_string")
         expect(dropdown).to_contain_text("ProcessValue_integer")
@@ -827,8 +827,8 @@ class TestAddPVFiltering:
         page_session.locator('button.mod-danger:right-of(:text("ProcessValue_string"))').first.click()
         expect(page_session.get_by_text("ProcessValue_string")).not_to_be_visible()
 
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        expect(page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first).to_contain_text("ProcessValue_string")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        expect(page_session.locator('select:below(:text("Add a new process value to this case"))').first).to_contain_text("ProcessValue_string")
         page_session.get_by_role("button", name="Cancel").click()
 
     @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
@@ -843,8 +843,8 @@ class TestAddPVFiltering:
         display(TaskExecutionUI(engine))
         page_session.get_by_role("button", name="Reload Tasks").click()
 
-        page_session.get_by_role("button", name="Add new ProcessValue").click()
-        page_session.locator('select:below(:text("Add a new ProcessValue to this case"))').first.select_option("log:ProcessValue_string")
+        page_session.get_by_role("button", name="Add new process valueue").click()
+        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
         page_session.get_by_role("button", name="Create").click()
 
         string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
