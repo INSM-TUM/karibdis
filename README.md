@@ -2,7 +2,7 @@
 <sub class="tagline" style="font-size: .6em;">Knowledge-Augmented Reasoning for Intelligent Business Decision and Intelligence Support</sub>
 </h1>
 
-<sub>![CI](https://github.com/INSM-TUM/karibdis/actions/workflows/python-test.yml/badge.svg)</sub>
+<sub>[![CI](https://github.com/INSM-TUM/karibdis/actions/workflows/python-test.yml/badge.svg)](https://github.com/INSM-TUM/karibdis/actions/workflows/python-test.yml)</sub>
 
 Karibdis is a proof-of-concept research prototype for a **Knowledge-graph-based Business Process Management System** to enable semantically explainable process execution support. 
 It allows to import process knowledge from various sources, such as text, event logs, or existing ontologies and knowledge graphs. 
