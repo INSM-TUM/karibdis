@@ -9,8 +9,8 @@ It allows to import process knowledge from various sources, such as text, event 
 The imported knowledge is stored in an internal RDF-based **Process Knowledge Graph**, which the system uses for providing grounded explanations for decision support.
 
 ## Functionalities & Usage
-The easiest way to familarize yourself with the functionality and usage of the prototype is to watch the [demonstration video](https://doi.org/10.6084/m9.figshare.30529892) or have a look at our research articles (see below).
-
+The easiest way to familarize yourself with the functionality and usage of the prototype is to watch the [spotlight demonstration vide](https://doi.org/10.6084/m9.figshare.31535404) or have a look at our research articles (see below).
+Further, a more detailed [in-depth demonstration video](https://doi.org/10.6084/m9.figshare.30529892) is available.
 Generally, the application is split into four views relating to different tasks on and next to the path from process knowledge sources to semantically explainable execution support, namely Knowledge Modeling, Decision Making, Task Execution, and Graph Exploration.
 
 
