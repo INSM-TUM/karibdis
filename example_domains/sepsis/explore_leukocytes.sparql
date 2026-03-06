@@ -1,0 +1,3 @@
+PREFIX log: <http://example.org/>
+
+DESCRIBE log:ProcessValue_Leucocytes

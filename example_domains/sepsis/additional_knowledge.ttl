@@ -10,6 +10,16 @@
     rdfs:label "Patient Name" ;
     :dataType xsd:string .
 
+log:ProcessValue_SIRSCritHeartRate rdfs:label "SIRS Heart Rate" .
+
+log:ProcessValue_SIRSCritLeucos rdfs:label "SIRS Leucocytes" .
+
+log:ProcessValue_SIRSCritTachypnea rdfs:label "SIRS Tachypnea" .
+
+log:ProcessValue_SIRSCritTemperature rdfs:label "SIRS Temperature" .
+
+log:ProcessValue_InfectionSuspected rdfs:label "Infection Suspected" .
+
 
 :SetCaseNameRule a sh:NodeShape ;
     sh:targetClass :Case ;
