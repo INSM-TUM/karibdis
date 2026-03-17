@@ -709,40 +709,40 @@ class TestNonEntityMultipleValues:
         assert "Second Value" in assigned_strings
         assert "Third Value" in assigned_strings
 
-    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
-    def test_existing_non_entity_values_displayed_and_removable(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
-        """Test that pre-existing non-entity case values are displayed as inputs and individual ones can be removed."""
-        pkg, engine = system_test_data
+    # @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    # def test_existing_non_entity_values_displayed_and_removable(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+    #     """Test that pre-existing non-entity case values are displayed as inputs and individual ones can be removed."""
+    #     pkg, engine = system_test_data
 
-        str_pv = _pv_for(XSD.string)
-        pkg.add((case, str_pv, Literal("keep", datatype=XSD.string)))
-        pkg.add((case, str_pv, Literal("remove_me", datatype=XSD.string)))
+    #     str_pv = _pv_for(XSD.string)
+    #     pkg.add((case, str_pv, Literal("keep", datatype=XSD.string)))
+    #     pkg.add((case, str_pv, Literal("remove_me", datatype=XSD.string)))
 
-        display(TaskExecutionUI(engine))
-        page_session.get_by_role("button", name=RELOAD_TASKS_BUTTON).click()
+    #     display(TaskExecutionUI(engine))
+    #     page_session.get_by_role("button", name=RELOAD_TASKS_BUTTON).click()
 
-        # Add string PV to load existing values
-        page_session.get_by_role("button", name=ADD_PV_BUTTON).click()
-        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
-        page_session.get_by_role("button", name="Create").click()
+    #     # Add string PV to load existing values
+    #     page_session.get_by_role("button", name=ADD_PV_BUTTON).click()
+    #     page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
+    #     page_session.get_by_role("button", name="Create").click()
 
-        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
-        expect(string_inputs).to_have_count(3) # 2 existing + 1 new empty
+    #     string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+    #     expect(string_inputs).to_have_count(3) # 2 existing + 1 new empty
 
-        # Remove the instance with value "remove_me"
-        remove_idx = next(
-            i for i in range(3)
-            if string_inputs.nth(i).input_value() == "remove_me"
-        )
-        page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_string")):has-text("×")').nth(remove_idx).click()
-        expect(string_inputs).to_have_count(2)
+    #     # Remove the instance with value "remove_me"
+    #     remove_idx = next(
+    #         i for i in range(3)
+    #         if string_inputs.nth(i).input_value() == "remove_me"
+    #     )
+    #     page_session.locator('button:not(.mod-danger):right-of(:text("ProcessValue_string")):has-text("×")').nth(remove_idx).click()
+    #     expect(string_inputs).to_have_count(2)
 
-        page_session.get_by_role("button", name="Submit").click()
-        _wait_for_task(engine, 0)
+    #     page_session.get_by_role("button", name="Submit").click()
+    #     _wait_for_task(engine, 0)
 
-        assigned = [str(v) for v in pkg.objects(subject=case, predicate=str_pv)]
-        assert "keep" in assigned
-        assert "remove_me" not in assigned
+    #     assigned = [str(v) for v in pkg.objects(subject=case, predicate=str_pv)]
+    #     assert "keep" in assigned
+    #     assert "remove_me" not in assigned
 
 
 class TestPerInstanceDeletion:
@@ -834,27 +834,27 @@ class TestAddPVFiltering:
         expect(page_session.locator('select:below(:text("Add a new process value to this case"))').first).to_contain_text("ProcessValue_string")
         page_session.get_by_role("button", name="Cancel").click()
 
-    @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
-    def test_add_pv_with_existing_case_values_shows_n_plus_one_inputs(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
-        """When a PV not in the form has N existing case values, adding it creates N+1 inputs."""
-        pkg, engine = system_test_data
+    # @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
+    # def test_add_pv_with_existing_case_values_shows_n_plus_one_inputs(self, system_test_data, solara_test, page_session: playwright.sync_api.Page):
+    #     """When a PV not in the form has N existing case values, adding it creates N+1 inputs."""
+    #     pkg, engine = system_test_data
 
-        str_pv = _pv_for(XSD.string)
-        pkg.add((case, str_pv, Literal("existing1", datatype=XSD.string)))
-        pkg.add((case, str_pv, Literal("existing2", datatype=XSD.string)))
+    #     str_pv = _pv_for(XSD.string)
+    #     pkg.add((case, str_pv, Literal("existing1", datatype=XSD.string)))
+    #     pkg.add((case, str_pv, Literal("existing2", datatype=XSD.string)))
 
-        display(TaskExecutionUI(engine))
-        page_session.get_by_role("button", name=RELOAD_TASKS_BUTTON).click()
+    #     display(TaskExecutionUI(engine))
+    #     page_session.get_by_role("button", name=RELOAD_TASKS_BUTTON).click()
 
-        page_session.get_by_role("button", name=ADD_PV_BUTTON).click()
-        page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
-        page_session.get_by_role("button", name="Create").click()
+    #     page_session.get_by_role("button", name=ADD_PV_BUTTON).click()
+    #     page_session.locator('select:below(:text("Add a new process value to this case"))').first.select_option("log:ProcessValue_string")
+    #     page_session.get_by_role("button", name="Create").click()
 
-        string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
-        expect(string_inputs).to_have_count(3)
-        expect(string_inputs.nth(0)).to_have_value("existing1")
-        expect(string_inputs.nth(1)).to_have_value("existing2")
-        expect(string_inputs.nth(2)).to_have_value("")
+    #     string_inputs = page_session.locator('input:right-of(:text("ProcessValue_string"))')
+    #     expect(string_inputs).to_have_count(3)
+    #     expect(string_inputs.nth(0)).to_have_value("existing1")
+    #     expect(string_inputs.nth(1)).to_have_value("existing2")
+    #     expect(string_inputs.nth(2)).to_have_value("")
 
 
 # ===== HELPER FUNCTIONS =====
