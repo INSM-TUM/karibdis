@@ -36,9 +36,8 @@ ATTR_COL_WIDTH   = '200px'
 VALUE_COL_WIDTH  = '400px'
 TYPE_COL_WIDTH   = '150px'
 ACTION_COL_WIDTH = '80px'
-CHIP_LABEL_WIDTH = '322px'
+INPUT_WIDTH = '322px'
 CHIP_BTN_WIDTH   = '28px'
-SCALAR_INPUT_WIDTH = '350px'
 
 XSD_TYPE_LABELS = {
     XSD.string:  'string',
@@ -73,10 +72,14 @@ def get_attr_meta(pkg, attr) -> AttrMeta:
         attr_type=attr_type,
         is_functional=(attr, RDF.type, OWL.FunctionalProperty) in pkg,
         is_entity=attr_type is not None and attr_type not in XSD,
-        attr_name=pkg.label(attr),
+        attr_name=_strip_prefix(pkg.label(attr)),
     )
 
 # =========================== HELPERS ===========================
+def _strip_prefix(label: str) -> str:
+    """Strips namespace prefix from a label, e.g. 'log:Task_Entity' → 'Task_Entity'."""
+    return label.split(":", 1)[1] if ":" in label else label
+
 def _compute_default(attr_type) -> object:
     """Returns a sensible default value for a given XSD type."""
     if attr_type is None or attr_type not in XSD:
@@ -106,34 +109,55 @@ def xsd_type_label(pkg, attr_type) -> str:
     return XSD_TYPE_LABELS.get(attr_type, 'string')
 
 
-def make_scalar_widget(attr_type, default_value, placeholder, widget_layout, on_change):
-    """Factory: returns the correct ipywidget for a given XSD type."""
+def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofocus=False):
+    """Factory: returns the correct input widget for a given XSD type."""
+    style = f"width: {INPUT_WIDTH}; margin: 2px 0;"
     if attr_type == XSD.integer:
-        return w.IntText(value=default_value, description=placeholder,
-                        layout=widget_layout, on_value=on_change)
+        def int_handler(val):
+            try:
+                on_change(int(val) if val else 0)
+            except (ValueError, TypeError):
+                pass
+        return v.TextField(
+            v_model=str(default_value), type="number", placeholder=placeholder,
+            autofocus=autofocus, on_v_model=int_handler, dense=True, style_=style, full_width=True,
+        )
     if attr_type == XSD.float:
-        return w.FloatText(value=default_value, description=placeholder,
-                        layout=widget_layout, on_value=on_change)
+        def float_handler(val):
+            try:
+                on_change(float(val) if val else 0.0)
+            except (ValueError, TypeError):
+                pass
+        return v.TextField(
+            v_model=str(default_value), type="number", step="any", placeholder=placeholder,
+            autofocus=autofocus, on_v_model=float_handler, dense=True, style_=style,
+        )
     if attr_type == XSD.boolean:
         return w.Checkbox(value=default_value, description=placeholder,
                         on_value=on_change)
     # XSD.string and fallback
-    return w.Text(value=default_value, placeholder=placeholder,
-                layout=widget_layout, on_value=on_change)
+    return v.TextField(
+        v_model=default_value or "", placeholder=placeholder,
+        autofocus=autofocus, on_v_model=on_change, dense=True, style_=style,
+    )
 
 
 # =========================== ATTRIBUTE ROW COMPONENTS ===========================
 
 @reacton.component
-def ScalarAttributeRow(attr, meta, vals, on_widget_change, on_delete_instance):
-    for idx, val in enumerate(vals):
-        placeholder = f"Value {idx + 1}" if len(vals) > 1 else ""
+def ScalarAttributeRow(attr, meta, vals, on_widget_change, on_delete_instance, on_add_instance, focus_last=False):
+    is_boolean = meta.attr_type == XSD.boolean
+    is_string = meta.attr_type == XSD.string
+    effective_vals = vals[:1] if is_boolean and not meta.is_functional else vals
+
+    for idx, val in enumerate(effective_vals):
+        is_last = idx == len(effective_vals) - 1
         widget = make_scalar_widget(
-            meta.attr_type, val, placeholder,
-            None if meta.attr_type == XSD.boolean else ipywidgets.Layout(margin='2px 0', width=SCALAR_INPUT_WIDTH),
+            meta.attr_type, val, "Empty String" if is_string else "",
             on_widget_change(attr, idx),
+            autofocus=(focus_last and is_last),
         )
-        if meta.is_functional:
+        if meta.is_functional or is_boolean:
             w.Box(children=[widget])
         else:
             with w.HBox(layout=w.Layout(margin='2px 0')):
@@ -145,11 +169,23 @@ def ScalarAttributeRow(attr, meta, vals, on_widget_change, on_delete_instance):
                     style=w.ButtonStyle(button_color='#d0d0d0'),
                     on_click=on_delete_instance(attr, idx),
                 )
+
+    # Always show "Add value…" placeholder for non-functional, non-boolean types
+    if not is_boolean and not meta.is_functional:
+            w.Button(
+                description='Add a new value',
+                layout=w.Layout(width=INPUT_WIDTH, height='30px', margin='2px 0'),
+                button_style='',
+                style=w.ButtonStyle(button_color='#e8e8e8', text_color='#999999', font_style='italic'),
+                on_click=on_add_instance(attr),
+            )
+        
+        
+    
 @reacton.component
 def EntityAttributeRow(pkg, attr, meta, vals, on_widget_change, on_delete_instance, on_add_entity_select):
-    menu_open, set_menu_open = reacton.use_state(False)
     options = list(pkg.subjects(predicate=RDF.type / (RDFS.subClassOf * ZeroOrMore), object=meta.attr_type))
-    labels = [str(pkg.label(option)) for option in options]
+    labels = [str(_strip_prefix(pkg.label(option))) for option in options]
     dropdown_options = list(zip(labels, options))
     options_with_empty = [("Select a value", EMPTY_ENTITY)] + dropdown_options
 
@@ -163,17 +199,15 @@ def EntityAttributeRow(pkg, attr, meta, vals, on_widget_change, on_delete_instan
         )
     else:
         visible_instances = [(idx, v) for idx, v in enumerate(vals) if v != EMPTY_ENTITY]
-        has_chips = len(visible_instances) > 0
-        show_menu = menu_open or not has_chips
         already_selected = {v for _, v in visible_instances}
-        available_options = [("Select a value", EMPTY_ENTITY)] + [
+        remaining_options = [
             (lbl, val) for lbl, val in dropdown_options if val not in already_selected
         ]
 
         with w.VBox():
             for idx, chip_value in visible_instances:
                 with w.HBox(layout=w.Layout(margin='2px 0')):
-                    w.Label(value=str(pkg.label(chip_value)), layout=w.Layout(width=CHIP_LABEL_WIDTH))
+                    w.Label(value=str(_strip_prefix(pkg.label(chip_value))), layout=w.Layout(width=INPUT_WIDTH))
                     w.Button(
                         description='×',
                         layout=w.Layout(width=CHIP_BTN_WIDTH, height='28px'),
@@ -181,24 +215,13 @@ def EntityAttributeRow(pkg, attr, meta, vals, on_widget_change, on_delete_instan
                         style=w.ButtonStyle(button_color='#d0d0d0'),
                         on_click=on_delete_instance(attr, idx),
                     )
-            if show_menu:
-                with w.HBox(layout=w.Layout(margin='2px 0', align_items='center')):
-                    w.Dropdown(
-                        value=EMPTY_ENTITY,
-                        options=available_options,
-                        layout=w.Layout(width=CHIP_LABEL_WIDTH),
-                        on_value=lambda new_value: (on_add_entity_select(attr)(new_value), set_menu_open(False)),
-                    )
-                    if has_chips:
-                        w.Button(
-                            description='Close',
-                            layout=w.Layout(width='60px', height='28px'),
-                            button_style='',
-                            on_click=lambda *_: set_menu_open(False),
-                        )
-            if not show_menu:
-                w.Button(description='+', layout=w.Layout(width='30px', height='30px'),
-                        button_style='info', on_click=lambda *_: set_menu_open(True))
+            if remaining_options:
+                w.Dropdown(
+                    value=EMPTY_ENTITY,
+                    options=[("Add a new value", EMPTY_ENTITY)] + remaining_options,
+                    layout=w.Layout(width=INPUT_WIDTH, margin='2px 0'),
+                    on_value=on_add_entity_select(attr),
+                )
 
 # =========================== APPLICATION SHELL ===========================
 class Application(ABC):
@@ -758,7 +781,7 @@ def DecisionUI(engine):
         set_decisions(list(engine.open_decisions()))
 
     def decision_label(decision):
-        return engine.pkg.label(decision.subject)
+        return _strip_prefix(engine.pkg.label(decision.subject))
 
     def make_decision_view(decision):
         return DecisionBody(engine, decision, reload)
@@ -786,11 +809,11 @@ def DecisionBody(engine, current_decision, reload):
     with w.VBox(layout=w.Layout(overflow='scroll', height='60vh', width='100%')) as main:
         options, set_options = reacton.use_state([])
         reacton.use_effect(lambda: set_options(current_decision.get_top_k_results(20)), [current_decision])
-        v.CardTitle(children=f' Decide {engine.pkg.label(context_type)}' + (f' for {engine.pkg.label(context_case)}' if context_case else '') + (f' {label_context}' if label_context else ''), layout=w.Layout(flex='0 0 auto'))
+        v.CardTitle(children=f' Decide {engine.pkg.label(context_type)}' + (f' for {_strip_prefix(engine.pkg.label(context_case))}' if context_case else '') + (f' {label_context}' if label_context else ''), layout=w.Layout(flex='0 0 auto'))
 
         for score, option, reasoning in options:
             with w.VBox(layout=w.Layout(border='solid #FAFAFA', margin='0.2%', padding='0.1%', flex='0 0 auto')):  
-                v.Label(children=f'{engine.pkg.label(option)} ({score})', style=LabelStyle(font_weight='bold', width='100%'))
+                v.Label(children=f'{_strip_prefix(engine.pkg.label(option))} ({score})', style=LabelStyle(font_weight='bold', width='100%'))
                 for reason in reasoning:
                     w.Label(value=f'- {reason}') # TODO: Add single scores?
                 w.Button(description='Confirm', on_click=lambda option=option: [engine.handle_decision(current_decision, option), reload()])
@@ -846,7 +869,7 @@ def TaskExecutionUI(engine):
         set_tasks(list(engine.open_tasks()))
 
     def task_label(task):
-        return engine.pkg.label(task[0])
+        return _strip_prefix(engine.pkg.label(task[0]))
 
     def make_task_view(task):
         return TaskBody(engine, task, reload)
@@ -881,6 +904,8 @@ def TaskBody(engine, current_task_case, reload):
     pv_values_ref = reacton.use_ref({})
     pv_values_ref.current = pv_values
 
+    focus_attr_ref = reacton.use_ref(None)
+
     def load_initial_values():
         activity = next(pkg.objects(predicate=BPO.instanceOf, subject=current_task), None)
         initial = {}
@@ -896,8 +921,10 @@ def TaskBody(engine, current_task_case, reload):
             meta = get_attr_meta(pkg, pv)
             existing = _load_existing_values(pkg, current_case, pv)
             new_vals = existing if existing else [EMPTY_ENTITY if meta.is_entity else _compute_default(meta.attr_type)]
+            if meta.attr_type in XSD and meta.attr_type != XSD.boolean:
+                focus_attr_ref.current = pv
             set_pv_values({**pv_values_ref.current, pv: new_vals})
-
+                        
     # --- Handlers ---
     def _make_handlers():
         def on_submit_click():
@@ -943,6 +970,7 @@ def TaskBody(engine, current_task_case, reload):
         def on_add_instance(pv):
             def handler(*_):
                 current = pv_values_ref.current
+                focus_attr_ref.current = pv
                 set_pv_values({**current, pv: current[pv] + [_compute_default(get_attr_meta(pkg, pv).attr_type)]})
             return handler
 
@@ -951,7 +979,7 @@ def TaskBody(engine, current_task_case, reload):
     on_submit_click, on_widget_change, on_delete_instance, on_delete_attribute, on_add_entity_select, on_add_instance = reacton.use_memo(_make_handlers, [])
 
     with w.VBox() as main:  
-        v.CardTitle(children=f'{pkg.label(next(pkg.objects(predicate = BPO.instanceOf, subject = current_task), None))} for {pkg.label(current_case)}')
+        v.CardTitle(children=f'{pkg.label(next(pkg.objects(predicate = BPO.instanceOf, subject = current_task), None))} for {_strip_prefix(pkg.label(current_case))}')
         with w.HBox(layout=w.Layout(padding='10px', background_color='#f5f5f5', border_bottom='2px solid #ddd')):
             w.Label(value='Attribute', layout=w.Layout(width=ATTR_COL_WIDTH, font_weight='bold'))
             w.Label(value='Value', layout=w.Layout(width=VALUE_COL_WIDTH, font_weight='bold'))
@@ -965,9 +993,6 @@ def TaskBody(engine, current_task_case, reload):
                 with w.HBox(layout=w.Layout(padding='10px', border_bottom='1px solid #eee')):
                     with w.VBox(layout=w.Layout(width='200px')):
                         w.Label(value=meta.attr_name)
-                        if not meta.is_functional and not meta.is_entity:
-                            w.Button(description='+', layout=w.Layout(width='30px', height='30px'),
-                                    button_style='info', on_click=on_add_instance(pv))
                     # Value column - different rendering based on type and instance count
                     with w.VBox(layout=w.Layout(width='400px')):
                         if meta.attr_type not in XSD:
@@ -977,9 +1002,14 @@ def TaskBody(engine, current_task_case, reload):
                                 on_add_entity_select,
                             )
                         else:
+                            should_focus = focus_attr_ref.current == pv
+                            if should_focus:
+                                focus_attr_ref.current = None
                             ScalarAttributeRow(
                                 pv, meta, vals,
                                 on_widget_change, on_delete_instance,
+                                on_add_instance,
+                                focus_last=should_focus,
                             )
                     type_label = xsd_type_label(pkg, meta.attr_type)
                     w.Label(value=type_label, layout=w.Layout(width=TYPE_COL_WIDTH))
@@ -996,45 +1026,35 @@ def TaskBody(engine, current_task_case, reload):
 
 @reacton.component
 def AddProcessValueUI(pkg, attributes, add_pv_to_form):
-    
-    open, set_open = reacton.use_state(False)
+
     remaining_options, set_remaining_options = reacton.use_state([])
-    selected_pv, set_selected_pv = reacton.use_state(None)
 
     def update_remaining_options():
         all_pvs = list(pkg.subjects(predicate=RDF.type, object=BPO.ProcessValue))
-        new_options = [(pkg.label(pv), pv) for pv in set(all_pvs) - set(attributes)]
+        new_options = [(_strip_prefix(pkg.label(pv)), pv) for pv in set(all_pvs) - set(attributes)]
         set_remaining_options(new_options)
-        set_selected_pv(new_options[0][1] if new_options else None)
 
     reacton.use_effect(update_remaining_options, [attributes])
 
-    with w.VBox() as main:
-        if len(remaining_options) == 0:
-            w.Label(value="No other process values available to add.")
-        elif not open:
-            w.Button(description="Add new process value", on_click=lambda *_: set_open(True))
-        else:
-            if remaining_options and selected_pv is not None:
-                w.Label(value="Add a new process value to this case")
-                w.Dropdown(options=remaining_options, value=selected_pv, on_value=set_selected_pv)
+    def on_select(new_value):
+        if new_value is None or new_value == EMPTY_ENTITY:
+            return
+        try:
+            add_pv_to_form(new_value)
+        except Exception as e:
+            print(f"Error adding ProcessValue: {e}")
 
-                def on_create(b=None):
-                    pv_to_add = selected_pv
-                    set_open(False)              
-                    try:
-                        add_pv_to_form(pv_to_add)
-                    except Exception as e:
-                        print(f"Error adding ProcessValue: {e}")
-                        # Reopen dialog on error
-                        set_open(True)
-                    
-                with w.HBox():
-                    w.Button(description="Create", on_click=on_create)
-                    w.Button(description="Cancel", on_click=lambda *_: set_open(False))
-            else:
-                w.Label(value="Loading ProcessValues...")
+    with w.VBox() as main:
+        if remaining_options:
+            w.Dropdown(
+                value=EMPTY_ENTITY,
+                options=[("Add a process value", EMPTY_ENTITY)] + remaining_options,
+                on_value=on_select,
+            )
+        else:
+            w.Label(value="No other process values available to add.")
     return main
+
 
 # =========================== UTILS ===========================
 
