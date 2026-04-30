@@ -1,2 +1,3 @@
 -r requirements.txt
+starlette<1.0.0 # See https://github.com/widgetti/solara/issues/1143, need to wait for new Solara release
 pytest-ipywidgets
