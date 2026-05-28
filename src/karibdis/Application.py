@@ -10,6 +10,8 @@ from pyparsing import ParseException
 import reacton
 import reacton.ipywidgets as w
 import reacton.ipyvuetify as v
+v.ipyvuetify.theme.dark = False
+
 from ipywidgets.widgets.widget_string import LabelStyle
 
 
