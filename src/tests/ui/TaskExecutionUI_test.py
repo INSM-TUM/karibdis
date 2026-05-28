@@ -12,6 +12,16 @@ from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
 
 
+# Workaround patch for Playwright's dropdown selection not working reliably in rapid succession.
+# TODO while this works, a more robust test and/or application design would be better
+from playwright.sync_api import Locator
+_orig_select_option = Locator.select_option
+def patched_select_option(self, *args, **kwargs):
+    _orig_select_option(self, *args, **kwargs)
+    time.sleep(0.1)
+Locator.select_option = patched_select_option
+
+
 # -------------------- Static test data --------------------
 
 TASK_1 = URIRef("http://example.org/Task_1_1")
@@ -83,6 +93,7 @@ def system_test_data(request):
         example_pv = _pv_for(dtype)
         pkg.add((example_pv, RDF.type, BPO.ProcessValue))
         pkg.add((example_pv, BPO.dataType, dtype))
+        pkg.add((example_pv, RDFS.label, Literal(_pv_row_label(dtype))))
         if dtype in activity_pvs:
             for activity in activity_list:
                 pkg.add((activity, BPO.writesValue, example_pv))
@@ -329,6 +340,7 @@ class TestValuePersistence:
         page_session.get_by_role("button", name="Submit").click()
         _wait_for_task(engine, 0)
 
+        time.sleep(0.1) 
         _assign_activity_to_task(pkg, TASK_1_2, "log:Activity_CRP")
         _wait_for_task(engine, 1)
         page_session.get_by_role("button", name=RELOAD_TASKS_BUTTON).click()
