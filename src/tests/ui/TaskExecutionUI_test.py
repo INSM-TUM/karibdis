@@ -620,10 +620,12 @@ class TestScalarMultipleValues:
         add_btn.first.click()
 
         string_inputs = _scalar_inputs(page_session, XSD.string)
+        expect(string_inputs).to_have_count(3) # Sanity check
         string_inputs.nth(0).fill("Alpha")
         string_inputs.nth(1).fill("Beta")
         string_inputs.nth(2).fill("Gamma")
 
+        expect(_instance_delete_buttons(page_session, XSD.string)).to_have_count(3) # Sanity check 2
         _instance_delete_buttons(page_session, XSD.string).nth(1).click()
 
         expect(string_inputs).to_have_count(2)
@@ -634,8 +636,7 @@ class TestScalarMultipleValues:
         _wait_for_task(engine, 0)
 
         assigned = [str(v) for v in pkg.objects(subject=CASE_1, predicate=_pv_for(XSD.string))]
-        assert "Alpha" in assigned
-        assert "Gamma" in assigned
+        assert {"Alpha", "Gamma"} == set(assigned)
         assert "Beta" not in assigned
 
     @pytest.mark.parametrize("system_test_data", [{"activity_pvs": [BPO.Role]}], indirect=True)
