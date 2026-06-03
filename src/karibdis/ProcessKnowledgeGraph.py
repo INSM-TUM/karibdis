@@ -1,3 +1,8 @@
+from typing import Any, Union    
+from rdflib.plugins.sparql.sparql import Query
+from rdflib.store import TripleAddedEvent, TripleRemovedEvent
+
+
 from rdflib import Graph, Literal, RDF, URIRef, Namespace
 from urllib.parse import quote, unquote
 from karibdis.utils import *
@@ -9,10 +14,19 @@ class ProcessKnowledgeGraph(Graph):
     
     def __init__(self):
         super().__init__()
+        # super().__init__(store=Caching_Store())
         self.parse(importlib.resources.files('karibdis').joinpath('base_ontology.ttl'), format='turtle')
         self.parse(importlib.resources.files('karibdis').joinpath('base_rules.ttl'), format='turtle')
         self.parse(importlib.resources.files('karibdis').joinpath('declare_ontology.ttl'), format='turtle')
 
+        self.query_cacheing = {}
+        self.store.dispatcher.subscribe(TripleAddedEvent, self.reset_cache)
+        self.store.dispatcher.subscribe(TripleRemovedEvent, self.reset_cache)
+
+    def reset_cache(self, context):
+        # if len(self.query_cacheing):
+        #     print(f"Clearing query cache with {len(self.query_cacheing)} entries")
+        self.query_cacheing = {}
 
     def unassigned_tasks(self):
         return set(self.objects(predicate=~BPO.partOf)) - set(self.subjects(predicate=BPO.performedBy))
@@ -75,3 +89,16 @@ class ProcessKnowledgeGraph(Graph):
 
     def label(self, uri):
         return next(self.objects(subject=uri, predicate=RDFS.label), self.namespace_manager.curie(uri))
+
+    def query(self, query: Union[Query, str], *args, **kwargs: Any):
+        query_key = str(query).replace('\n', ' ').strip()
+        #print(f"Run? {query_key not in self.query_cacheing} query: {query}")
+        if query_key not in self.query_cacheing:
+            # print(f"Adding to cache ({len(self.query_cacheing)}): {query_key}")
+            self.query_cacheing[query_key] = super().query(query, *args, **kwargs)
+            # print(f"Post adding: {self.query_cacheing}")
+        else:
+            # print(f"Using cached result for query: {5}")
+            pass
+        return self.query_cacheing[query_key]
+
