@@ -18,6 +18,7 @@ class AsyncModuleProxy:
         threading.Thread(target=self._load_module, daemon=True).start()
 
     def _load_module(self):
+        #print(f'Start aynchronous import of module "{self._module_name}".')
         module = importlib.import_module(self._module_name)
         with self._lock:
             self._module = module
