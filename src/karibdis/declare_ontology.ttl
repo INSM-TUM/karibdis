@@ -75,7 +75,7 @@ declare:RespondedExistenceRule a sh:PropertyShape ;
     sh:severity sh:Info ;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Activity '{?b}' must occur somewhere because '{?a}' occurs somewhere." ;
+        sh:message "Activity '{?b}' must be performed because '{?a}' has been performed." ;
         sh:select """
             PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
             SELECT $this ?a ?b (IF(STR(?thisactivity) = STR(?b), 0.3, -0.05) AS ?value)
@@ -104,7 +104,7 @@ declare:ResponseRule a sh:PropertyShape ;
     sh:severity sh:Info ;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Activity '{?b}' must occur somewhere after '{?a}' because '{?a}' occurs somewhere." ;
+        sh:message "Activity '{?b}' must be performed after '{?a}' ." ;
         sh:select """
             PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
             SELECT $this ?a ?b (IF(STR(?thisactivity) = STR(?b), 0.3, -0.05) AS ?value)
@@ -126,6 +126,7 @@ declare:ResponseRule a sh:PropertyShape ;
             }
         """ ;
     ] .
+
 # Not Responded Existence not supported by PM4Py
 declare:not_responded_existence rdf:type owl:ObjectProperty ;
     rdfs:domain :Activity ;
@@ -138,14 +139,14 @@ declare:NotRespondedExistenceRule a sh:PropertyShape ;
     sh:severity sh:Info ;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Activity '{?b}' must not occur because '{?a}' has occurred." ;
+        sh:message "Activity '{?b}' must not be performed because '{?a}' has been performed." ;
         sh:select """
             PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
             SELECT $this ?a ?b (-1.0 AS ?value)
             WHERE {
                 $this :partOf ?case .
                 $this :instanceOf__hypothetical ?b .
-                ?a declare:not_responded_existence ?b .
+                ?a declare:not_responded_existence ?b . # TODO: cover case with ?b declare:not_responded_existence ?a 
                 FILTER EXISTS {
                     ?atask :partOf ?case ;
                            :instanceOf ?a .
@@ -165,7 +166,7 @@ declare:PrecedenceRule a sh:PropertyShape ;
     sh:severity sh:Info ;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Activity '{?b}' can only occur if '{?a}' has occurred before." ;
+        sh:message "Activity '{?b}' must not be performed as '{?a}' has not been performed yet." ;
         sh:select """
             PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
             SELECT $this ?a ?b (-0.5 AS ?value)
