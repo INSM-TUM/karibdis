@@ -317,6 +317,9 @@ class SimpleEventLogImporter(KnowledgeImporter):
             'init' : URIRef('http://infs.cit.tum.de/karibdis/declare/init'), # TODO put in namespace once existing 
             'chainresponse' : URIRef('http://infs.cit.tum.de/karibdis/declare/chainresponse'), 
             'exactly_one' : URIRef('http://infs.cit.tum.de/karibdis/declare/exactly_one'),
+            'responded_existence' : URIRef('http://infs.cit.tum.de/karibdis/declare/responded_existence'),
+            'response' : URIRef('http://infs.cit.tum.de/karibdis/declare/response'),
+            'precedence' : URIRef('http://infs.cit.tum.de/karibdis/declare/precedence')
         }
 
         for relation, discovered in declare.items():

@@ -491,7 +491,7 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
 @reacton.component
 def DiscoveryUI(importer, log, run_extraction):
     declare, set_declare = reacton.use_state(None)
-    allowed_templates, set_allowed_templates = reacton.use_state(['init', 'chainresponse', 'exactly_one'])
+    allowed_templates, set_allowed_templates = reacton.use_state(['init', 'chainresponse', 'exactly_one', 'responded_existence', 'response', 'precedence'])
     if not declare:
         min_support_ratio, set_min_support_ratio = reacton.use_state(0.8)
         min_confidence_ratio, set_min_confidence_ratio = reacton.use_state(0.8)
