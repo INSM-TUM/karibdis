@@ -99,7 +99,7 @@ class ProcessKnowledgeGraph(Graph):
 
     def query(self, query: Union[Query, str], *args, **kwargs: Any):
         # print(query)
-        query_key = str(query).replace('\r\n', ' ').replace('\n', ' ').strip()
+        query_key = str(query).replace('\r\n', ' ').replace('\n', ' ').strip() + str(kwargs.get('initBindings', ''))
         #print(f"Run? {query_key not in self.query_result_cache} query: {query}")
         
         if isinstance(query, str):

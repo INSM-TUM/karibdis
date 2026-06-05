@@ -45,7 +45,7 @@ class KGProcessEngine:
                         abort_on_first=False,
                         allow_infos=True,
                         allow_warnings=True,
-                        meta_shacl=True,
+                        meta_shacl=False, # TODO add central shape validation to decision option evaluation
                         advanced=True,
                         js=False,
                         debug=False,
@@ -287,8 +287,9 @@ class Decision:
                 abort_on_first=False,
                 allow_infos=True,
                 allow_warnings=True,
-                meta_shacl=True,
+                meta_shacl=False, # TODO add central shape validation to decision option evaluation
                 advanced=True,
+                inplace=True,
                 js=False,
                 debug=False,
                 focus_nodes=[self.subject])

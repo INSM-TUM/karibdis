@@ -68,6 +68,10 @@ class MockLLM(Runnable):
         # input.messages
         return BaseMessage(content=self.generate(), type='')
     
+    
+# TODO temporary fix
+def clear_writes_values(event_log_importer):
+    event_log_importer.addition_graph.remove((None, BPO.writesValue, None))
 
 
 
@@ -83,6 +87,7 @@ def test_sepsis_demonstration():
     log = pm4py.read_xes(os.path.join(example_domains, 'sepsis/Sepsis Cases - Event Log.xes'))
     event_log_importer = SimpleEventLogImporter(pkg=pkg, ignore_columns=['Infusion'], attribute_aliases={'org:group' : BPO.Resource,})
     event_log_importer.import_event_log_entities(log=log)
+    clear_writes_values(event_log_importer)
     _declare = discover_declare(log, allowed_templates=['init', 'chainresponse', 'exactly_one'], min_support_ratio=0.8, min_confidence_ratio=0.8)
     _declare['exactly_one']['LacticAcid'] = False
     event_log_importer.import_declare(_declare)
@@ -122,3 +127,4 @@ def test_sepsis_demonstration():
     pkg += new_knowledge
     
     engine.deduce()
+    pkg.serialize(destination=os.path.join(example_domains, 'sepsis/demo_graph.ttl'), format='ttl')

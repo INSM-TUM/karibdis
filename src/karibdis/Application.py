@@ -243,6 +243,7 @@ class JupyterApplication(ipywidgets.Box):
             ('Decisionmaking', reacton.render_fixed(DecisionUI(self.system.engine))[0]),
             ('Task Execution', reacton.render_fixed(TaskExecutionUI(self.system.engine))[0]),
             ('Explore Graph', reacton.render_fixed(GraphExplorationUI(self.system.pkg))[0]),
+            ('System Actions', reacton.render_fixed(SystemActionsView(self.system))[0]),
         ]
         root = ipywidgets.Tab()
         root.layout = ipywidgets.Layout(width='100%', height='100%')
@@ -1073,7 +1074,44 @@ def AddProcessValueUI(pkg, attributes, add_pv_to_form):
     return main
 
 
+# ====================== DEBUG VIEW ===========================
+
+@reacton.component
+def SystemActionsView(system):     
+    with w.VBox() as main:
+        v.CardTitle(children='System Actions')
+        
+        def load_from_disk(files):
+            file = files[0]
+            system.pkg -= system.pkg  # Clear current graph
+            system.pkg.parse(data=str(file.content,'utf-8'), format='ttl')
+
+        def save_to_disk():
+            system.save_to_disk()
+            print('Saved PKG to disk.')
+
+        w.FileUpload(
+            description = 'Load PKG from Disk',
+            accept='.ttl',
+            on_accept=lambda **args: print(args),
+            multiple=False,
+            on_value=load_from_disk
+        )
+        display(download(system.pkg.serialize(format='ttl'), 'Download PKG', filename='pkg.ttl'))
+    return main
+
+
 # =========================== UTILS ===========================
+
+import base64
+from IPython.display import HTML
+
+def download(data, title = "Download file", filename = "file"):
+    b64 = base64.b64encode(data.encode())
+    payload = b64.decode()
+    html = '<a download="{filename}" href="data:text/csv;base64,{payload}" target="_blank">{title}</a>'
+    html = html.format(payload=payload,title=title,filename=filename)
+    return HTML(html)
 
 # Attention: Veeeeery hacky
 def format_query(queries, callback, output=None):

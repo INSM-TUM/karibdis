@@ -251,3 +251,17 @@ log:ProcessValue_Leucocytes
             }
         """ ;
     ] .
+
+
+log:Activity_CRP :writesValue log:ProcessValue_CRP .
+log:Activity_LacticAcid :writesValue log:ProcessValue_LacticAcid .
+log:Activity_Leucocytes :writesValue log:ProcessValue_Leucocytes .
+log:Activity_ER%20Registration :writesValue log:ProcessValue_Age, :ProcessValue_Name .
+
+log:Activity_ER%20Sepsis%20Triage :writesValue 
+    log:ProcessValue_SIRSCritHeartRate,
+        log:ProcessValue_SIRSCritLeucos,
+        log:ProcessValue_SIRSCritTachypnea,
+        log:ProcessValue_SIRSCritTemperature .
+
+log:Activity_ER%20Triage :writesValue log:ProcessValue_InfectionSuspected . 
