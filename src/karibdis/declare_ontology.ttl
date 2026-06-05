@@ -37,6 +37,153 @@ declare:InitRule a sh:NodeShape ;
         """ ;
 	] .
 
+declare:choice rdf:type owl:ObjectProperty ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "At least one of the subject or object activity must occur.".
+
+declare:ChoiceRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "At least one of '{?a}' or '{?b}' must occur." ;
+        sh:select """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+            SELECT $this ?a ?b (0.25 AS ?value)
+            WHERE {
+                
+                $this :partOf ?case .
+                $this :instanceOf__hypothetical ?thisactivity .
+                ?a declare:choice ?b .
+                FILTER(?thisactivity = ?a || ?thisactivity = ?b) .
+                FILTER NOT EXISTS { ?t1 :partOf ?case ; :instanceOf ?a . }
+                FILTER NOT EXISTS { ?t2 :partOf ?case ; :instanceOf ?b . }
+            }
+        """ ;
+    ] .
+
+declare:responded_existence rdf:type owl:ObjectProperty ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "If A occurs, B must occur somewhere in the case.".
+
+declare:RespondedExistenceRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Activity '{?b}' must occur somewhere because '{?a}' occurs somewhere." ;
+        sh:select """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+            SELECT $this ?b (IF(STR(?thisactivity) = STR(?b), 0.3, -0.05) AS ?value)
+            WHERE {
+                $this :partOf ?case .
+                $this :instanceOf__hypothetical ?thisactivity .
+                ?atask :partOf ?case .
+                ?atask :instanceOf ?a .
+                ?a declare:responded_existence ?b .
+                FILTER NOT EXISTS {
+                    ?btask :partOf ?case .
+                    ?btask :instanceOf ?b .
+                }
+            }
+        """ ;
+    ] .
+
+declare:response rdf:type owl:ObjectProperty ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "If A occurs, B must occur somewhere after A in the case.".
+
+declare:ResponseRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Activity '{?b}' must occur somewhere after '{?a}' because '{?a}' occurs somewhere." ;
+        sh:select """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+            SELECT $this ?b (IF(STR(?thisactivity) = STR(?b), 0.3, -0.05) AS ?value)
+            WHERE {
+                $this :partOf ?case .
+                $this :instanceOf__hypothetical ?thisactivity .
+                
+                ?atask :partOf ?case .
+                ?atask :instanceOf ?a .
+                ?atask :completedAt ?atime .
+                ?a declare:response ?b .
+                
+                FILTER NOT EXISTS {
+                    ?btask :partOf ?case .
+                    ?btask :instanceOf ?b .
+                    ?btask :completedAt ?btime .
+                    FILTER(?btime > ?atime)
+                }
+            }
+        """ ;
+    ] .
+
+declare:not_responded_existence rdf:type owl:ObjectProperty ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "If A occurs, B must never occur.".
+
+declare:NotRespondedExistenceRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Activity '{?b}' must not occur because '{?a}' has occurred." ;
+        sh:select """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+            SELECT $this ?a ?b (-1.0 AS ?value)
+            WHERE {
+                $this :partOf ?case .
+                $this :instanceOf__hypothetical ?b .
+                ?a declare:not_responded_existence ?b .
+                FILTER EXISTS {
+                    ?atask :partOf ?case ;
+                           :instanceOf ?a .
+                }
+            }
+        """ ;
+    ] .
+
+declare:precedence rdf:type owl:ObjectProperty ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity ;
+    rdfs:comment "B can only occur if A has occurred before.".
+
+declare:PrecedenceRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Activity '{?b}' can only occur if '{?a}' has occurred before." ;
+        sh:select """
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>
+            SELECT $this ?a ?b (-0.5 AS ?value)
+            WHERE {
+                $this :partOf ?case .
+                $this :instanceOf__hypothetical ?thisactivity .
+                ?a declare:precedence ?b .
+                FILTER NOT EXISTS {
+                    ?atask :partOf ?case ;
+                           :instanceOf ?a ;
+                           :completedAt ?atime .
+                    
+                }
+                FILTER(?thisactivity = ?b)
+            }
+        """ ;
+    ] .
+    
 
 declare:chainresponse rdf:type owl:ObjectProperty;
     rdfs:domain :Activity ;

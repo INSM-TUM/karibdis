@@ -61,7 +61,202 @@ class TestDefaultDeductions(unittest.TestCase):
 
         new = self.get_deduced_triples(test_graph)
         self.assertIn((URIRef('http://example.org/Task_A_1'), BPO.instanceOf, activity), new)
+        
+    def testDeclareChoice(self):
+        test_graph = ProcessKnowledgeGraph()
+        engine = KGProcessEngine(test_graph)
+        
+        activity1 = URIRef('http://example.org/Activity_ER%20Registration')
+        activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        any_activity = URIRef('http://example.org/Activity_Any')
+        test_graph.add((activity1, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity2, BPO.instanceOf, BPO.Activity))
+        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/choice'), activity2))
+        
+        engine.open_new_case()
+        engine.deduce()
+        
+        decision = next(engine.open_decisions())
+        # Constrained activities are equally rewarded over other activities
+        self.assertEqual(decision.evaluate_option(activity1)[0], decision.evaluate_option(activity2)[0])
+        self.assertGreater(decision.evaluate_option(activity1)[0], decision.evaluate_option(any_activity)[0])
+        
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+        
+        new = self.get_deduced_triples(test_graph)
+    
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        self.assertNotIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity2), test_graph)
 
+    def testDeclareRespondedExistence(self):
+        test_graph = ProcessKnowledgeGraph()
+        engine = KGProcessEngine(test_graph)
+
+        activity1 = URIRef('http://example.org/Activity_ER%20Registration')
+        activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/responded_existence'), activity2))
+
+        engine.open_new_case()
+        engine.deduce()
+        # Constraint not triggered yet; activity2 not rewarded
+        decision = next(engine.open_decisions())
+        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Constraint triggered; activity2 rewarded
+        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity2)
+        engine.complete_task(next(engine.open_tasks())[0])
+        
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity2), test_graph)
+        
+    def testDeclareResponse(self):
+        test_graph = ProcessKnowledgeGraph()
+        engine = KGProcessEngine(test_graph)
+
+        activity1 = URIRef('http://example.org/Activity_ER%20Registration')
+        activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/response'), activity2))
+
+        engine.open_new_case()
+        engine.deduce()
+        # Constraint not triggered yet; activity2 not rewarded
+        decision = next(engine.open_decisions())
+        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Edge case: activity2 triggers first 
+        # Constraint not triggered yet; activity2 not rewarded
+        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity1), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Constraint triggered; activity2 rewarded
+        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity2)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_3'), BPO.instanceOf, activity2), test_graph)
+        
+    def testDeclareResponseAlt(self):
+        test_graph = ProcessKnowledgeGraph()
+        engine = KGProcessEngine(test_graph)
+        
+        activity1 = URIRef('http://example.org/Activity_ER%20Registration')
+        activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/response'), activity2))
+
+        engine.open_new_case()
+        engine.deduce()
+        # Constraint not triggered yet; activity2 not rewarded
+        decision = next(engine.open_decisions())
+        self.assertEqual(decision.evaluate_option(activity1)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Edge case: activity1 triggers twice 
+        # Constraint triggered; activity2 not rewarded
+        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity1), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Constraint still triggered; activity2 rewarded
+        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity2)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_3'), BPO.instanceOf, activity2), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Constraint fulfilled for all instances; activity2 no longer rewarded
+        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        
+        
+    def testDeclareNotRespondedExistence(self):
+        test_graph = ProcessKnowledgeGraph()
+        engine = KGProcessEngine(test_graph)
+
+        activity1 = URIRef('http://example.org/Activity_ER%20Registration')
+        activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        any_activity = URIRef('http://example.org/Activity_Any')
+        test_graph.add((activity1, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity2, BPO.instanceOf, BPO.Activity))
+        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/not_responded_existence'), activity2))
+
+        engine.open_new_case()
+        engine.deduce()
+        # Constraint not triggered yet; activity2 not penalised
+        decision = next(engine.open_decisions())
+        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        
+        decision = next(engine.open_decisions())
+        # Constraint triggered; activity2 penalised
+        self.assertLess(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        self.assertLess(decision.evaluate_option(activity2)[0], decision.evaluate_option(any_activity)[0])
+        
+        engine.handle_decision(decision, any_activity)
+        engine.complete_task(next(engine.open_tasks())[0])
+        
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        self.assertNotIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity2), test_graph)
+        
+    def testDeclarePrecedence(self):
+        test_graph = ProcessKnowledgeGraph()
+        engine = KGProcessEngine(test_graph)
+
+        activity1 = URIRef('http://example.org/Activity_ER%20Registration')
+        activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        any_activity = URIRef('http://example.org/Activity_Any')
+        test_graph.add((activity1, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity2, BPO.instanceOf, BPO.Activity))
+        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/precedence'), activity2))
+
+        engine.open_new_case()
+        engine.deduce()
+        
+        decision = next(engine.open_decisions())
+        # Precedence constraint not fulfilled; activity2 is penalised
+        self.assertEqual(decision.evaluate_option(activity1)[0], decision.evaluate_option(any_activity)[0])
+        self.assertLess(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        engine.handle_decision(decision, activity1)
+        engine.complete_task(next(engine.open_tasks())[0])
+        
+        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        
+        # Precedence constraint fulfilled; activity2 no longer penalised
+        decision = next(engine.open_decisions())
+        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(any_activity)[0])
+        
+        engine.handle_decision(decision, activity2)
+        engine.complete_task(next(engine.open_tasks())[0])
+        
+        self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity2), test_graph)
     
     def testDeclareChainResponse(self):
         test_graph = ProcessKnowledgeGraph()
