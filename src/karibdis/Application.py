@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from itertools import zip_longest
 import os
+import threading
 import ipywidgets
 from IPython.display import display, clear_output, Javascript
 
@@ -101,11 +102,20 @@ def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofoc
             autofocus=autofocus, on_v_model=int_handler, dense=True, style_=style, full_width=True,
         )
     if attr_type == XSD.float:
+        _debounce_timer = [None]
+
         def float_handler(val):
-            try:
-                on_change(float(val) if val else 0.0)
-            except (ValueError, TypeError):
-                pass
+            if _debounce_timer[0] is not None:
+                _debounce_timer[0].cancel()
+
+            def fire():
+                try:
+                    on_change(float(val) if val else 0.0)
+                except (ValueError, TypeError):
+                    pass
+
+            _debounce_timer[0] = threading.Timer(0.8, fire)
+            _debounce_timer[0].start()
         return v.TextField(
             v_model=str(default_value), type="number", step="any", placeholder=placeholder,
             autofocus=autofocus, on_v_model=float_handler, dense=True, style_=style, full_width=True,
