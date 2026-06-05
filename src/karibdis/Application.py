@@ -107,6 +107,7 @@ def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofoc
         def float_handler(val):
             if _debounce_timer[0] is not None:
                 _debounce_timer[0].cancel()
+            # on_change(val) # This would make sense, but leads to behavior where the debount timer is not properly canceled
 
             def fire():
                 try:
@@ -118,7 +119,7 @@ def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofoc
             _debounce_timer[0].start()
         return v.TextField(
             v_model=str(default_value), type="number", step="any", placeholder=placeholder,
-            autofocus=autofocus, on_v_model=float_handler, dense=True, style_=style, full_width=True,
+            autofocus=autofocus, on_v_model=on_change, dense=True, style_=style, full_width=True,
         )
     if attr_type == XSD.boolean:
         return w.Checkbox(value=default_value, description=placeholder,
