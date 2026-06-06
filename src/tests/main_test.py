@@ -1,5 +1,6 @@
 import unittest
 import datetime
+import itertools
 # from . import context
 from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
 from karibdis.KGProcessEngine import KGProcessEngine
@@ -204,26 +205,23 @@ class TestDefaultDeductions(unittest.TestCase):
         test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/not_responded_existence'), activity2))
 
-        engine.open_new_case()
-        engine.deduce()
-        # Constraint not triggered yet; activity2 not penalised
-        decision = next(engine.open_decisions())
-        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
-        engine.complete_task(next(engine.open_tasks())[0])
-
-        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
+        for selected, not_selected in itertools.permutations([activity1, activity2]):
+            case = engine.open_new_case()
+            engine.deduce()
+            # Constraint not triggered yet; not selected activity not penalised
+            decision = next(engine.open_decisions())
+            self.assertEqual(decision.evaluate_option(not_selected)[0], decision.evaluate_option(selected)[0])
+            engine.handle_decision(decision, selected)
+            engine.complete_task(decision.subject)
+            
+            decision = next(engine.open_decisions())
+            # Constraint triggered; not selected activity penalised
+            self.assertLess(decision.evaluate_option(not_selected)[0], decision.evaluate_option(selected)[0])
+            self.assertLess(decision.evaluate_option(not_selected)[0], decision.evaluate_option(any_activity)[0])
+            engine.handle_decision(decision, selected)
+            engine.complete_task(decision.subject)
+            engine.close_case(case)
         
-        decision = next(engine.open_decisions())
-        # Constraint triggered; activity2 penalised
-        self.assertLess(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        self.assertLess(decision.evaluate_option(activity2)[0], decision.evaluate_option(any_activity)[0])
-        
-        engine.handle_decision(decision, any_activity)
-        engine.complete_task(next(engine.open_tasks())[0])
-        
-        self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
-        self.assertNotIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity2), test_graph)
         
     def testDeclarePrecedence(self):
         test_graph = ProcessKnowledgeGraph()

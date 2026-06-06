@@ -132,6 +132,7 @@ declare:not_responded_existence rdf:type owl:ObjectProperty ;
     rdfs:domain :Activity ;
     rdfs:range :Activity ;
     rdfs:comment "If A occurs, B must never occur.".
+    # TODO consider making symmetrical and activating OWL reasoning
 
 declare:NotRespondedExistenceRule a sh:PropertyShape ;
     sh:targetClass :Task ;
@@ -146,7 +147,7 @@ declare:NotRespondedExistenceRule a sh:PropertyShape ;
             WHERE {
                 $this :partOf ?case .
                 $this :instanceOf__hypothetical ?b .
-                ?a declare:not_responded_existence ?b . # TODO: cover case with ?b declare:not_responded_existence ?a 
+                ?a (declare:not_responded_existence | ^declare:not_responded_existence) ?b . 
                 FILTER EXISTS {
                     ?atask :partOf ?case ;
                            :instanceOf ?a .
