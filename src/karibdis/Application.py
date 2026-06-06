@@ -1002,10 +1002,10 @@ def TaskBody(engine, current_task_case, reload):
             grid_template_columns=_GRID_COLS, flex_flow='row dense',
         )):
             # Header row — same grid tracks as data, so columns align perfectly
-            w.Label(value='Attribute', layout=_hdr())
-            w.Label(value='Value',     layout=_hdr())
-            w.Label(value='Type',      layout=_hdr())
-            w.Label(value='Actions',   layout=_hdr(last=True))
+            # w.Label(value='Attribute', layout=_hdr())
+            # w.Label(value='Value',     layout=_hdr())
+            # w.Label(value='Type',      layout=_hdr())
+            # w.Label(value='Actions',   layout=_hdr(last=True))
 
             for pv, vals in pv_values.items():
                 meta = get_attr(pkg, pv)

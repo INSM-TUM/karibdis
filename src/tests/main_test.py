@@ -138,7 +138,6 @@ class TestDefaultDeductions(unittest.TestCase):
         
         decision = next(engine.open_decisions())
         # Edge case: activity2 triggers first 
-        # Constraint not triggered yet; activity2 not rewarded
         self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
         engine.handle_decision(decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])

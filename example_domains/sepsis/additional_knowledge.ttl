@@ -5,8 +5,9 @@
 @prefix log: <http://example.org/> . 
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix declare: <http://infs.cit.tum.de/karibdis/declare/> .
 
-:ProcessValue_Name a :ProcessValue ;
+:ProcessValue_Name a :ProcessValue, owl:FunctionalProperty ;
     rdfs:label "Patient Name" ;
     :dataType xsd:string .
 
@@ -188,8 +189,13 @@ log:ProcessValue_Leucocytes
             WHERE {
                 $this :instanceOf__hypothetical ?activity .
                 ?disease :requiresAsPreventiveTreatment ?activity . 
-                $this :partOf / :ProcessValue_Disease  ?reason .
+                $this :partOf ?case .
+                ?case :ProcessValue_Disease  ?reason .
                 ?reason :inducesHighRisk ?disease .
+                FILTER NOT EXISTS {
+                    ?previous :partOf ?case .
+                    ?previous :instanceOf ?activity
+                }
             }
             GROUP BY $this ?disease
         """ ;
@@ -265,3 +271,5 @@ log:Activity_ER%20Sepsis%20Triage :writesValue
         log:ProcessValue_SIRSCritTemperature .
 
 log:Activity_ER%20Triage :writesValue log:ProcessValue_InfectionSuspected . 
+
+log:Activity_Admission%20IC declare:response log:Activity_Admission%20NC .

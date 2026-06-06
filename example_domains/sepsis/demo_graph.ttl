@@ -15,9 +15,6 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-log:Activity_Admission%20NC a :Activity ;
-    rdfs:label "Admission NC" .
-
 log:Activity_CRP a :Activity ;
     rdfs:label "CRP" ;
     :writesValue log:ProcessValue_CRP .
@@ -742,8 +739,13 @@ log:Resource_Y a :Resource ;
             WHERE {\r
                 $this :instanceOf__hypothetical ?activity .\r
                 ?disease :requiresAsPreventiveTreatment ?activity . \r
-                $this :partOf / :ProcessValue_Disease  ?reason .\r
+                $this :partOf ?case .\r
+                ?case :ProcessValue_Disease  ?reason .\r
                 ?reason :inducesHighRisk ?disease .\r
+                FILTER NOT EXISTS {\r
+                    ?previous :partOf ?case .\r
+                    ?previous :instanceOf ?activity\r
+                }\r
             }\r
             GROUP BY $this ?disease\r
         """ ] ;
@@ -967,6 +969,26 @@ declare:ChainResponseRule a sh:NodeShape ;
         """ ] ;
     sh:targetClass :Case .
 
+declare:ChoiceRule a sh:PropertyShape ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [ a sh:SPARQLConstraint ;
+            sh:message "At least one of '{?a}' or '{?b}' must occur." ;
+            sh:select """\r
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>\r
+            SELECT $this ?a ?b (0.25 AS ?value)\r
+            WHERE {\r
+                \r
+                $this :partOf ?case .\r
+                $this :instanceOf__hypothetical ?thisactivity .\r
+                ?a declare:choice ?b .\r
+                FILTER(?thisactivity = ?a || ?thisactivity = ?b) .\r
+                FILTER NOT EXISTS { ?t1 :partOf ?case ; :instanceOf ?a . }\r
+                FILTER NOT EXISTS { ?t2 :partOf ?case ; :instanceOf ?b . }\r
+            }\r
+        """ ] ;
+    sh:targetClass :Task .
+
 declare:InitRule a sh:NodeShape ;
     sh:rule [ a sh:SPARQLRule ;
             sh:construct """\r
@@ -988,8 +1010,105 @@ declare:InitRule a sh:NodeShape ;
             sh:prefixes : ] ;
     sh:targetClass :Case .
 
+declare:NotRespondedExistenceRule a sh:PropertyShape ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [ a sh:SPARQLConstraint ;
+            sh:message "Activity '{?b}' must not be performed because '{?a}' has been performed." ;
+            sh:select """\r
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>\r
+            SELECT $this ?a ?b (-1.0 AS ?value)\r
+            WHERE {\r
+                $this :partOf ?case .\r
+                $this :instanceOf__hypothetical ?b .\r
+                ?a (declare:not_responded_existence | ^declare:not_responded_existence) ?b . \r
+                FILTER EXISTS {\r
+                    ?atask :partOf ?case ;\r
+                           :instanceOf ?a .\r
+                }\r
+            }\r
+        """ ] ;
+    sh:targetClass :Task .
+
+declare:PrecedenceRule a sh:PropertyShape ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [ a sh:SPARQLConstraint ;
+            sh:message "Activity '{?b}' must not be performed as '{?a}' has not been performed yet." ;
+            sh:select """\r
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>\r
+            SELECT $this ?a ?b (-0.5 AS ?value)\r
+            WHERE {\r
+                $this :partOf ?case .\r
+                $this :instanceOf__hypothetical ?thisactivity .\r
+                ?a declare:precedence ?b .\r
+                FILTER NOT EXISTS {\r
+                    ?atask :partOf ?case ;\r
+                           :instanceOf ?a ;\r
+                           :completedAt ?atime .\r
+                    \r
+                }\r
+                FILTER(?thisactivity = ?b)\r
+            }\r
+        """ ] ;
+    sh:targetClass :Task .
+
+declare:RespondedExistenceRule a sh:PropertyShape ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [ a sh:SPARQLConstraint ;
+            sh:message "Activity '{?b}' must be performed because '{?a}' has been performed." ;
+            sh:select """\r
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>\r
+            SELECT $this ?a ?b (IF(STR(?thisactivity) = STR(?b), 0.3, -0.05) AS ?value)\r
+            WHERE {\r
+                $this :partOf ?case .\r
+                $this :instanceOf__hypothetical ?thisactivity .\r
+                ?atask :partOf ?case .\r
+                ?atask :instanceOf ?a .\r
+                ?a declare:responded_existence ?b .\r
+                FILTER NOT EXISTS {\r
+                    ?btask :partOf ?case .\r
+                    ?btask :instanceOf ?b .\r
+                }\r
+            }\r
+        """ ] ;
+    sh:targetClass :Task .
+
+declare:ResponseRule a sh:PropertyShape ;
+    sh:path :instanceOf__hypothetical ;
+    sh:severity sh:Info ;
+    sh:sparql [ a sh:SPARQLConstraint ;
+            sh:message "Activity '{?b}' must be performed after '{?a}' ." ;
+            sh:select """\r
+            PREFIX declare: <http://infs.cit.tum.de/karibdis/declare/>\r
+            SELECT $this ?a ?b (IF(STR(?thisactivity) = STR(?b), 0.3, -0.05) AS ?value)\r
+            WHERE {\r
+                $this :partOf ?case .\r
+                $this :instanceOf__hypothetical ?thisactivity .\r
+                \r
+                ?atask :partOf ?case .\r
+                ?atask :instanceOf ?a .\r
+                ?atask :completedAt ?atime .\r
+                ?a declare:response ?b .\r
+                \r
+                FILTER NOT EXISTS {\r
+                    ?btask :partOf ?case .\r
+                    ?btask :instanceOf ?b .\r
+                    ?btask :completedAt ?btime .\r
+                    FILTER(?btime > ?atime)\r
+                }\r
+            }\r
+        """ ] ;
+    sh:targetClass :Task .
+
 declare:chainresponse a owl:ObjectProperty ;
     rdfs:comment "If the subject activity occurs, the object activity must occur next." ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity .
+
+declare:choice a owl:ObjectProperty ;
+    rdfs:comment "At least one of the subject or object activity must occur." ;
     rdfs:domain :Activity ;
     rdfs:range :Activity .
 
@@ -1000,6 +1119,26 @@ declare:exactly_one a owl:ObjectProperty ;
 
 declare:init a owl:ObjectProperty ;
     rdfs:comment "The first activity for this process." ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity .
+
+declare:not_responded_existence a owl:ObjectProperty ;
+    rdfs:comment "If A occurs, B must never occur." ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity .
+
+declare:precedence a owl:ObjectProperty ;
+    rdfs:comment "B can only occur if A has occurred before." ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity .
+
+declare:responded_existence a owl:ObjectProperty ;
+    rdfs:comment "If A occurs, B must occur somewhere in the case." ;
+    rdfs:domain :Activity ;
+    rdfs:range :Activity .
+
+declare:response a owl:ObjectProperty ;
+    rdfs:comment "If A occurs, B must occur somewhere after A in the case." ;
     rdfs:domain :Activity ;
     rdfs:range :Activity .
 
@@ -1952,7 +2091,11 @@ rdfs:label a owl:AnnotationProperty .
 skos:exactMatch a owl:AnnotationProperty .
 
 log:Activity_Admission%20IC a :Activity ;
-    rdfs:label "Admission IC" .
+    rdfs:label "Admission IC" ;
+    declare:response log:Activity_Admission%20NC .
+
+log:Activity_Admission%20NC a :Activity ;
+    rdfs:label "Admission NC" .
 
 log:ProcessValue_Age a :ProcessValue,
         owl:FunctionalProperty ;
@@ -2002,7 +2145,8 @@ log:ProcessValue_SIRSCritTemperature a :ProcessValue,
     rdfs:label "SIRS Temperature" ;
     :dataType xsd:boolean .
 
-:ProcessValue_Name a :ProcessValue ;
+:ProcessValue_Name a :ProcessValue,
+        owl:FunctionalProperty ;
     rdfs:label "Patient Name" ;
     :dataType xsd:string .
 
@@ -5329,10 +5473,6 @@ owl:DatatypeProperty rdfs:subClassOf rdf:Property .
     rdfs:label "Task" ;
     rdfs:comment "One specific task that has been performed, is currently being performed, or has to be performed." .
 
-:Activity a owl:Class ;
-    rdfs:label "Activity" ;
-    rdfs:comment "A recurring activity of a process" .
-
 default1:Paediatric_Sepsis_Diagnostic_Biomarker a owl:Class ;
     rdfs:label "Paediatric Sepsis Diagnostic Biomarker" ;
     default1:Synonyms "Paediatric Sepsis Diagnostic Biomarker" ;
@@ -5346,6 +5486,10 @@ default1:Paediatric_Sepsis_Diagnostic_Biomarker a owl:Class ;
 :ProcessValue a owl:Class ;
     rdfs:label "Process Value" ;
     rdfs:comment "A non-entity variable inside a case." .
+
+:Activity a owl:Class ;
+    rdfs:label "Activity" ;
+    rdfs:comment "A recurring activity of a process" .
 
 default1:Neonatal_Sepsis_Biomarker a owl:Class ;
     rdfs:label "Neonatal Sepsis Diagnostic Biomarker" ;
