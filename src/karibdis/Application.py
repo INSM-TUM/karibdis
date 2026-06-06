@@ -23,7 +23,7 @@ import json
 from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
 from karibdis.utils import *
 from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
-from karibdis.KnowledgeImporter import KnowledgeImporter, TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter
+from karibdis.KnowledgeImporter import KnowledgeImporter, TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter, default_attribute_aliases
 import datetime
 from rdflib import Literal, RDFS, XSD
 from rdflib.paths import ZeroOrMore
@@ -475,11 +475,11 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
                             disabled=alias is not None
                         )
                         
-                        all_aliases = list(importer.attribute_aliases.values())
+                        all_aliases = list(set(importer.attribute_aliases.values()) | set(default_attribute_aliases.values())) # TODO allow dynamic alias sets
                         w.Dropdown(
                             options=list(zip(map(lambda alias: str(alias).replace(BASE_URL, ''), all_aliases), all_aliases)) + [('None', None)], # TODO 1: Make nice labels by shortening URIs # TODO 2: Allow more options / custom input
                             value=alias,
-                            on_value=lambda x, key=key: change_col_alias(key, x)
+                            on_value=lambda x, col=col: change_col_alias(col, x)
                         )
                 w.Button(description="Load Entities", on_click=complete_column_import)
         else:
@@ -491,7 +491,8 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
 @reacton.component
 def DiscoveryUI(importer, log, run_extraction):
     declare, set_declare = reacton.use_state(None)
-    allowed_templates, set_allowed_templates = reacton.use_state(['init', 'chainresponse', 'exactly_one', 'responded_existence', 'response', 'precedence'])
+    supported_templates = ['init', 'chainresponse', 'exactly_one', 'responded_existence', 'response', 'precedence']
+    allowed_templates, set_allowed_templates = reacton.use_state(supported_templates)
     if not declare:
         min_support_ratio, set_min_support_ratio = reacton.use_state(0.8)
         min_confidence_ratio, set_min_confidence_ratio = reacton.use_state(0.8)
@@ -523,7 +524,7 @@ def DiscoveryUI(importer, log, run_extraction):
 
         v.Select(
             prepend_icon='mdi-cogs',
-            items=allowed_templates,
+            items=supported_templates,
             label='Allowed Templates',
             multiple=True,
             chips=True, 

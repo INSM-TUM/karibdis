@@ -250,13 +250,20 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.entity_columns = set(entity_columns).union(set([BPO.Case, BPO.Activity]))
         self.value_columns = set(value_columns)
 
-    def change_col_alias(self, col_key, value):
-        previous_value = self.reverse_attribute_aliases.get(value, None)
-        if previous_value is not None:
-            del self.attribute_aliases[previous_value]
-            print(f'Removed alias {value} for {previous_value}')
-        self.attribute_aliases[col_key] = value
+
+    def change_col_alias(self, col_key, alias):
+        current_alias_holder = self.reverse_attribute_aliases.get(alias, None)
+        if current_alias_holder is not None:
+            del self.attribute_aliases[current_alias_holder]
+            print(f'Removed alias {alias} for {current_alias_holder}')
+
+        if alias is not None:
+            self.attribute_aliases[col_key] = alias
+        else: 
+            del self.attribute_aliases[col_key]
+
         self.recalculate_reverse_aliases()
+
 
     def recalculate_reverse_aliases(self):
         self.reverse_attribute_aliases = dict((v, k) for k, v in self.attribute_aliases.items())
