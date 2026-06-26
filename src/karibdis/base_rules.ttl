@@ -20,12 +20,14 @@ rules:ExtendStaleCasesRule a sh:NodeShape ;
                     FILTER NOT EXISTS { ?task :completedAt ?any }
                 }
                 FILTER NOT EXISTS {
-                    $this :isClosed true
+                    $this :closedAt ?anytime
                 }
 				BIND (rules:nexttask($this) AS ?next) .
 			}
         """ ;
 	] .
+
+# TODO add rule to add timestamps to planned tasks (once decision is made)
 
 
 rules:nexttask

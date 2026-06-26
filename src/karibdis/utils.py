@@ -29,7 +29,8 @@ class BASE_PROCESS_ONTOLOGY(DefinedNamespace):
 
     Case : URIRef
     partOf : URIRef
-    isClosed : URIRef
+    arrivedAt : URIRef
+    closedAt : URIRef
 
     Resource : URIRef
     performedBy : URIRef

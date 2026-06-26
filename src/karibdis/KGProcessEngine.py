@@ -61,12 +61,14 @@ class KGProcessEngine:
             id = URIRef(Namespace('http://example.org/')['Case_'+str(num_current_case+1)])  # TODO conceive better namespace scheme
         new_case = (id, RDF.type, BPO.Case)
         self.pkg.add(new_case)
-        self.handle_event_root({'knowledge_updated': True, 'added': {new_case}, 'removed': set()})
+        arrival = (id, BPO.arrivedAt, Literal(datetime.datetime.now()))
+        self.pkg.add(arrival)
+        self.handle_event_root({'knowledge_updated': True, 'added': {new_case, arrival}, 'removed': set()})
         return id
 
 
     def close_case(self, case_node):
-        to_set = (case_node, BPO.isClosed, Literal(True))
+        to_set = (case_node, BPO.closedAt, Literal(datetime.datetime.now()))
         self.pkg.add(to_set)
         # TODO clean up undecided tasks
         self.handle_event_root({'knowledge_updated': True, 'added': {to_set}, 'removed': set()}) # TODO code duplication!
@@ -89,7 +91,7 @@ class KGProcessEngine:
                 ?task :partOf ?case .
                 FILTER NOT EXISTS { ?task :instanceOf ?any }
                 FILTER NOT EXISTS {
-                    ?case :isClosed true
+                    ?case :closedAt ?anytime
                 }
             }"""
 
@@ -108,7 +110,7 @@ class KGProcessEngine:
                 ?task :instanceOf ?activity .
                 ?activity :canBeExecutedBy ?anyResourceConstraint .
                 FILTER NOT EXISTS { ?task :performedBy ?anyResource }
-                FILTER NOT EXISTS { ?case :isClosed true}
+                FILTER NOT EXISTS { ?case :closedAt ?anytime}
             }"""
         
         # TODO: Make dynamic based on whether the task actually needs assigned resources
@@ -194,7 +196,7 @@ class KGProcessEngine:
                 ?task :partOf ?case .
                 ?task :instanceOf ?any .
                 FILTER NOT EXISTS { ?task :completedAt ?time }
-                FILTER NOT EXISTS { ?case :isClosed true}
+                FILTER NOT EXISTS { ?case :closedAt ?anytime}
             }"""
 
         open_tasks = self.pkg.query(open_tasks_query)

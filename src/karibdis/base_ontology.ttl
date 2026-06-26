@@ -12,16 +12,18 @@
     rdfs:label "Task" ;
     rdfs:comment "One specific task that has been performed, is currently being performed, or has to be performed.".
 
-:directlyFollowedBy rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
+
+:directlyFollowedBy rdf:type owl:ObjectProperty, owl:FunctionalProperty ; # TODO deprecated, as directly follows is only defined on events, not on tasks
     rdfs:domain :Task ;
     rdfs:range :Task .
 
-:activatedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ;
+:activatedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ; # TODO: deprecated, the current execution model does not "activite" tasks/activities
     rdfs:domain :Task ;
     rdfs:range xsd:dateTime ;
     rdfs:comment "The timestamp at which a task became available to be executed".
+    
 
-:plannedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ; # This lifecycle phase can be argued to be domain-specific, but is included here for completenes purposeses
+:plannedAt rdf:type owl:DatatypeProperty , owl:FunctionalProperty ; 
     rdfs:domain :Task ;
     rdfs:range xsd:dateTime ;
     rdfs:comment "The timestamp at which a task was assigned a fixed time or resources to be executed".
@@ -56,10 +58,15 @@
     rdfs:range :Case ;
     rdfs:comment "The case a task belongs to".
 
-:isClosed rdf:type owl:DatatypeProperty, owl:FunctionalProperty ;
+:arrivedAt rdf:type owl:DatatypeProperty, owl:FunctionalProperty ;
     rdfs:domain :Case ;
     rdfs:range xsd:boolean ;
-    rdfs:comment "Whether the case is closed, i.e., not more events are expected to happen".
+    rdfs:comment "When the case arrived, i.e., the first time the system became aware of it.".
+
+:closedAt rdf:type owl:DatatypeProperty, owl:FunctionalProperty ;
+    rdfs:domain :Case ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "When the case was closed, i.e., no more events are expected to happen.".
 
 
 :Resource rdf:type owl:Class ;

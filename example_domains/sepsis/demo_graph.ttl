@@ -660,7 +660,7 @@ log:Resource_Y a :Resource ;
     sh:rule [ a sh:SPARQLRule ;
             sh:construct """\r
             CONSTRUCT {\r
-                ?this :isClosed True . \r
+                ?this :closedAt NOW() . \r
             } WHERE {\r
                 ?task :partOf? ?this.\r
                 ?task :instanceOf ?activity.\r
@@ -813,11 +813,23 @@ log:Resource_Y a :Resource ;
     rdfs:domain :Task ;
     rdfs:range xsd:dateTime .
 
+:arrivedAt a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:comment "When the case arrived, i.e., the first time the system became aware of it." ;
+    rdfs:domain :Case ;
+    rdfs:range xsd:boolean .
+
 :canBeExecutedBy a owl:ObjectProperty ;
     rdfs:comment "The specific roles and/or resources that are exclusively allowed to perform an activity" ;
     rdfs:domain :Activity ;
     rdfs:range [ a owl:Class ;
             owl:unionOf ( :Resource :Role ) ] .
+
+:closedAt a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:comment "When the case was closed, i.e., no more events are expected to happen." ;
+    rdfs:domain :Case ;
+    rdfs:range xsd:boolean .
 
 :completedAt a owl:DatatypeProperty,
         owl:FunctionalProperty ;
@@ -855,12 +867,6 @@ log:Resource_Y a :Resource ;
         owl:FunctionalProperty ;
     rdfs:comment "Whether the resource is currently available to work on a task" ;
     rdfs:domain :Resource ;
-    rdfs:range xsd:boolean .
-
-:isClosed a owl:DatatypeProperty,
-        owl:FunctionalProperty ;
-    rdfs:comment "Whether the case is closed, i.e., not more events are expected to happen" ;
-    rdfs:domain :Case ;
     rdfs:range xsd:boolean .
 
 :normal_max a owl:DatatypeProperty ;
@@ -2163,7 +2169,7 @@ rules:ExtendStaleCasesRule a sh:NodeShape ;
                     FILTER NOT EXISTS { ?task :completedAt ?any }\r
                 }\r
                 FILTER NOT EXISTS {\r
-                    $this :isClosed true\r
+                    $this :closedAt ?anytime\r
                 }\r
 				BIND (rules:nexttask($this) AS ?next) .\r
 			}\r

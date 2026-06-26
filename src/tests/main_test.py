@@ -45,7 +45,7 @@ class TestDefaultDeductions(unittest.TestCase):
     def testClosedCaseNotExtended(self):
         test_graph = ProcessKnowledgeGraph()
         test_graph.parse(importlib.resources.files('tests').joinpath('running_case_example.ttl'), format='turtle')
-        test_graph.add((URIRef('http://example.org/Case_B'), BPO.isClosed, Literal(True)))
+        test_graph.add((URIRef('http://example.org/Case_B'), BPO.closedAt, Literal(datetime.datetime.now())))
         
         new = self.get_deduced_triples(test_graph)
 
