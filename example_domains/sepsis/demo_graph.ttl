@@ -660,7 +660,7 @@ log:Resource_Y a :Resource ;
     sh:rule [ a sh:SPARQLRule ;
             sh:construct """\r
             CONSTRUCT {\r
-                ?this :closedAt NOW() . \r
+                ?this :closedAt ?time . \r
             } WHERE {\r
                 ?task :partOf? ?this.\r
                 ?task :instanceOf ?activity.\r

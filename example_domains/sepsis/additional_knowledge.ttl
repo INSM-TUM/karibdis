@@ -247,7 +247,7 @@ log:ProcessValue_Leucocytes
         a sh:SPARQLRule ;
         sh:construct """
             CONSTRUCT {
-                ?this :closedAt NOW() . 
+                ?this :closedAt ?time . 
             } WHERE {
                 ?task :partOf? ?this.
                 ?task :instanceOf ?activity.

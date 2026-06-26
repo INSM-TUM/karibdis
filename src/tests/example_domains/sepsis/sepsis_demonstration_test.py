@@ -128,3 +128,4 @@ def test_sepsis_demonstration():
     
     engine.deduce()
     pkg.serialize(destination=os.path.join(example_domains, 'sepsis/demo_graph.ttl'), format='ttl')
+    engine.open_new_case()
