@@ -7,7 +7,7 @@ from playwright.sync_api import expect
 from rdflib import RDF, RDFS, Literal, URIRef, XSD
 from rdflib.namespace import OWL
 
-from karibdis.Application import TaskExecutionUI
+from karibdis.ui.TaskExecutionUI import TaskExecutionUI
 from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
 

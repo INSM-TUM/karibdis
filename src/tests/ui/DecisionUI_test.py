@@ -2,11 +2,12 @@ import string
 
 from IPython.display import display
 from playwright.sync_api import Page, expect
+from rdflib import RDF, URIRef
 
 from karibdis.KGProcessEngine import KGProcessEngine
+from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
+from karibdis.ui.DecisionUI import DecisionBody
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
-from karibdis.Application import *
-
 from .ui_test_utils import wait_for
 
 
