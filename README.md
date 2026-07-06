@@ -1,4 +1,4 @@
-<h1>KARIBDIS<br>
+<img width="1551" height="1060" alt="grafik" src="https://github.com/user-attachments/assets/606af5e4-6083-4243-abab-ae8bbc0c7513" /><h1>KARIBDIS<br>
 <sub class="tagline" style="font-size: .6em;">Knowledge-Augmented Reasoning for Intelligent Business Decision and Intelligence Support</sub>
 </h1>
 
@@ -59,12 +59,16 @@ pkg = app.system.pkg # Get process knowledge graph object
 ## Publications
 As the prototype is a result of our research work, please consider our related publications for deeper background information. <br>
 
+A general presentation of the prototype can be found in the respective demo paper: <br>
+&emsp;[KARIBDIS - A Knowledge-Graph-Based Business Process Management System for Semantically Explainable Process Execution Support](https://doi.org/10.1007/978-3-032-27997-2_21)<br>
+&emsp;Leon Bein and Luise Pufahl. Intelligent Information Systems CAiSE 2026. Springer Nature, 2026.
+
 Detailed insight into the rationales and theory behind the prototype design can be found in the following preprint: <br>
 &emsp;[*Knowledge Graphs as Key Technology for Semantically Explainable Business Process Execution Support*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5865391)<br>
 &emsp;Leon Bein and Luise Pufahl. SSRN Preprint, 2025.
 
 Further related publications include:
-- [*Knowledge Graphs: A Key Technology for Explainable Knowledge-Aware Process Automation?*](https://link.springer.com/chapter/10.1007/978-3-031-78666-2_2) 
+- [*Knowledge Graphs: A Key Technology for Explainable Knowledge-Aware Process Automation?*](https://doi.org/10.1007/978-3-031-78666-2_2) 
 <br>Leon Bein and Luise Pufahl.  Business Process Management Workshops BPM 2024. Springer Nature, 2025.
-- [*Kraft – a Knowledge-graph-based Resource Allocation Framework*](https://link.springer.com/chapter/10.1007/978-3-032-02936-2_11)
+- [*Kraft – a Knowledge-graph-based Resource Allocation Framework*](https://doi.org/10.1007/978-3-032-02936-2_11)
 <br>Leon Bein, Niels Martin, and Luise Pufahl. International Conference on Business Process Management 2025. Springer Nature, 2025.
