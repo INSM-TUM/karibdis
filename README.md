@@ -60,7 +60,7 @@ pkg = app.system.pkg # Get process knowledge graph object
 As the prototype is a result of our research work, please consider our related publications for deeper background information. <br>
 
 A general presentation of the prototype can be found in the respective demo paper: <br>
-&emsp;[*KARIBDIS - A Knowledge-Graph-Based Business Process Management System for Semantically Explainable Process Execution Support*](https://doi.org/10.1007/978-3-032-27997-2_21)<br>
+&emsp;[*KARIBDIS - A Knowledge-Graph-Based Business Process Management System<br>&emsp; for Semantically Explainable Process Execution Support*](https://doi.org/10.1007/978-3-032-27997-2_21)<br>
 &emsp;Leon Bein and Luise Pufahl. Intelligent Information Systems CAiSE 2026. Springer Nature, 2026.
 
 Detailed insight into the rationales and theory behind the prototype design can be found in the following preprint: <br>
