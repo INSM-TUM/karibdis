@@ -1,4 +1,4 @@
-<img width="1551" height="1060" alt="grafik" src="https://github.com/user-attachments/assets/606af5e4-6083-4243-abab-ae8bbc0c7513" /><h1>KARIBDIS<br>
+<h1>KARIBDIS<br>
 <sub class="tagline" style="font-size: .6em;">Knowledge-Augmented Reasoning for Intelligent Business Decision and Intelligence Support</sub>
 </h1>
 
