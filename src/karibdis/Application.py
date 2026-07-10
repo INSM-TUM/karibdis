@@ -12,6 +12,7 @@ from karibdis.ui.GraphExplorationUI import GraphExplorationUI
 from karibdis.ui.KnowledgeModelingUI import KnowledgeModelingUI
 from karibdis.ui.TaskExecutionUI import TaskExecutionUI
 from karibdis.ui.ui_util import download
+from karibdis.ui.toast import ToastHost
 v.ipyvuetify.theme.dark = False
 
 
@@ -56,7 +57,13 @@ class JupyterApplication(ipywidgets.Box):
         for tab in root.children:
             tab.layout = ipywidgets.Layout(width='100%')
         root.titles = [tab[0] for tab in tabs]
-        return root
+
+        if getattr(self, '_toast', None) is None:
+            self._toast = reacton.render_fixed(ToastHost())[0]
+        return ipywidgets.VBox(
+            [root, self._toast],
+            layout=ipywidgets.Layout(width='100%', height='100%'),
+        )
 
     def run(self):
         self.display(self.base_view())
