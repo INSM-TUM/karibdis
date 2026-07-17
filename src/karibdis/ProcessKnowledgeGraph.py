@@ -97,22 +97,26 @@ class ProcessKnowledgeGraph(Graph):
     def label(self, uri):
         return next(self.objects(subject=uri, predicate=RDFS.label), self.namespace_manager.curie(uri))
 
-    def query(self, query: Union[Query, str], *args, **kwargs: Any):
-        # print(query)
-        query_key = str(query).replace('\r\n', ' ').replace('\n', ' ').strip() + str(kwargs.get('initBindings', ''))
-        #print(f"Run? {query_key not in self.query_result_cache} query: {query}")
-        
+    # Signature mirrors rdflib's Graph.query so that initNs/initBindings are captured whether
+    # callers pass them positionally or by keyword. pySHACL passes them positionally, so keying
+    # the cache off **kwargs alone made every SHACL $this focus node share one entry: the first
+    # focus node's result was replayed for all the others (e.g. only one Case ever got a Task).
+    def query(self, query: Union[Query, str], processor: Any = 'sparql', result: Any = 'sparql',
+              initNs: Any = None, initBindings: Any = None, use_store_provided: bool = True,
+              *args, **kwargs: Any):
+        query_text = str(query).replace('\r\n', ' ').replace('\n', ' ').strip()
+        bindings_key = str(sorted((str(k), str(v)) for k, v in initBindings.items())) if initBindings else ''
+        query_key = query_text + str(initNs or '') + bindings_key
+
         if isinstance(query, str):
-            if query_key not in self.query_parse_cache:
-                self.query_parse_cache[query_key] = translateQuery(parseQuery(query), None, dict(self.namespaces()))
-            query = self.query_parse_cache[query_key]
+            # Parsing depends only on the query text, not on the bindings it is run with.
+            if query_text not in self.query_parse_cache:
+                self.query_parse_cache[query_text] = translateQuery(parseQuery(query), None, dict(self.namespaces()))
+            query = self.query_parse_cache[query_text]
 
         if query_key not in self.query_result_cache:
-            # print(f"Adding to cache ({len(self.query_result_cache)}): {query_key}")
-            self.query_result_cache[query_key] = super().query(query, *args, **kwargs)
-            # print(f"Post adding: {self.query_result_cache}")
-        else:
-            # print(f"Using cached result for query: {5}")
-            pass
+            self.query_result_cache[query_key] = super().query(
+                query, processor, result, initNs, initBindings, use_store_provided, *args, **kwargs
+            )
         return self.query_result_cache[query_key]
 
