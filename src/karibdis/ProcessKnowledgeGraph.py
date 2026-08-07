@@ -98,8 +98,16 @@ class ProcessKnowledgeGraph(Graph):
         return next(self.objects(subject=uri, predicate=RDFS.label), self.namespace_manager.curie(uri))
 
     def query(self, query: Union[Query, str], *args, **kwargs: Any):
+        # Fixes initBindings being passed as a positional argument instead of a keyword argument while retaining stability toward rdflib updates
+        # See https://stackoverflow.com/questions/62721132/python-check-if-an-argument-was-passed-in-by-position-or-by-keyword?rq=3
+        argnames = Graph.query.__code__.co_varnames
+        argdict = dict(zip(argnames, args))
+        argdict.update(kwargs)
+
         # print(query)
-        query_key = str(query).replace('\r\n', ' ').replace('\n', ' ').strip() + str(kwargs.get('initBindings', ''))
+        query_key = str(query).replace('\r\n', ' ').replace('\n', ' ').strip()
+        bindings_key = str(sorted((str(k), str(v)) for k, v in argdict.get('initBindings', {}).items()))
+        query_key_parameterized = query_key + bindings_key
         #print(f"Run? {query_key not in self.query_result_cache} query: {query}")
         
         if isinstance(query, str):
@@ -109,10 +117,10 @@ class ProcessKnowledgeGraph(Graph):
 
         if query_key not in self.query_result_cache:
             # print(f"Adding to cache ({len(self.query_result_cache)}): {query_key}")
-            self.query_result_cache[query_key] = super().query(query, *args, **kwargs)
+            self.query_result_cache[query_key_parameterized] = super().query(query, *args, **kwargs)
             # print(f"Post adding: {self.query_result_cache}")
         else:
             # print(f"Using cached result for query: {5}")
             pass
-        return self.query_result_cache[query_key]
+        return self.query_result_cache[query_key_parameterized]
 
