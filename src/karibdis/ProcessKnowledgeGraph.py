@@ -1,4 +1,4 @@
-from typing import Any, Union    
+from typing import Any, Union
 from rdflib.plugins.sparql.sparql import Query
 from rdflib.store import TripleAddedEvent, TripleRemovedEvent
 
@@ -35,9 +35,11 @@ class ProcessKnowledgeGraph(Graph):
         #    print('Optimize')
         self.query_result_cache = {}
 
+    # TODO deprecated
     def unassigned_tasks(self):
         return set(self.objects(predicate=~BPO.partOf)) - set(self.subjects(predicate=BPO.performedBy))
 
+    # TODO deprecated
     def available_resources(self):
         # return set(self.subjects(predicate=BPO.isAvailable, object=Literal(True)))
         # TODO implement more sophisticated version than "just isn't busy atm"
@@ -58,20 +60,24 @@ class ProcessKnowledgeGraph(Graph):
         for resource_tuple in self.query(available_resources_query):
             yield resource_tuple[0]
     
-        
+
+    # TODO deprecated        
     def valid_resources(self, task_node):
         return set(self.objects(subject=task_node, predicate=BPO.instanceOf / BPO.canBeExecutedBy)) # TODO use rule engine
 
+    # TODO deprecated
     def update_availability(self, is_available=lambda resource_node: True):
         self.remove((None, BPO.isAvailable, None))
         for resource_node in self.subjects(predicate=RDF.type, object=BPO.Resource):
             self.add((resource_node, BPO.isAvailable, Literal(is_available(resource_node))))
 
+    # TODO deprecated
     def handle_assignment(self, task_node, resource_node):
         self.add((task_node, BPO.performedBy, resource_node))
         self.set(resource_node, BPO.isAvailable, Literal(False))
             
 
+    # TODO deprecated
     def subgraph_available_resources(self):
         available_resources = set(self.available_resources())
         resources_assigned = set(self.objects(predicate=BPO.performedBy))
@@ -90,6 +96,7 @@ class ProcessKnowledgeGraph(Graph):
         _, uri = next(filter(lambda nsp : nsp[0] == prefix, self.namespace_manager.namespaces()))
         return uri + quote(id)
 
+    # TODO deprecated
     def add_rule(self, rule):
         self.addN((s, p, o, URIRef('http://infs.cit.tum.de/karibdis/rules')) for s, p, o in rule) # TODO: magic string and also no thought put into this 
 

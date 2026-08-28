@@ -54,6 +54,10 @@ class KGProcessEngine:
         added = set(self.pkg) - before
 
         return removed, added
+
+    def deduce_chained(self):
+        self.handle_event_root({'knowledge_updated': True})
+
     
     def open_new_case(self, id=None): # TODO allow selecting case type
         if id is None:  

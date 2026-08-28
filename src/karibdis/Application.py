@@ -92,9 +92,7 @@ def SystemActionsView(system):
         
         def load_from_disk(files):
             file = files[0]
-            system.pkg -= system.pkg  # Clear current graph
-            system.pkg.parse(data=str(file.content,'utf-8'), format='ttl')
-
+            system.load_from_string(str(file.content,'utf-8'))
         def save_to_disk():
             system.save_to_disk()
             print('Saved PKG to disk.')
