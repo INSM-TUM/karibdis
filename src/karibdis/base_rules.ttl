@@ -105,3 +105,71 @@ rules:ExecutionPermissionReward a sh:PropertyShape ;
             }
         """ ;
     ] .
+
+:OpenTasksDecision a :DecisionType ;
+    rdfs:label "Decide Activity" ;
+    :hasDecisionInstanceQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        SELECT ?task ?case
+        WHERE {
+            ?case a :Case .
+            ?task :partOf ?case .
+            FILTER NOT EXISTS { ?task :instanceOf ?any }
+            FILTER NOT EXISTS {
+                ?case :closedAt ?anytime
+            }
+        }
+    """ ;
+    :hasDecisionOptionQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        SELECT ?activity
+        WHERE {
+            ?activity a :Activity . 
+        }
+    """ ;
+    :hasOptionEffectQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        CONSTRUCT {
+            $task :instanceOf ?activity
+        } WHERE {}
+    """ .
+
+
+:OpenAssignmentsDecision a :DecisionType ;
+    rdfs:label "Decide Resource" ;
+    :hasDecisionInstanceQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        SELECT ?task ?case ?activity
+        WHERE {
+            ?case a :Case .
+            ?task :partOf ?case .
+            ?task :instanceOf ?activity .
+            ?activity :canBeExecutedBy ?anyResourceConstraint . # TODO: Make dynamic based on whether the task actually needs assigned resources rather than who can do it
+            FILTER NOT EXISTS { ?task :performedBy ?anyResource }
+            FILTER NOT EXISTS { ?case :closedAt ?anytime}
+    } """ ;
+    :hasDecisionOptionQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        SELECT ?resource
+        WHERE {
+            ?resource a :Resource . 
+            FILTER NOT EXISTS { # TODO implicitly "available resources"
+                ?task :performedBy ?resource .  
+                FILTER NOT EXISTS { 
+                    ?task :completedAt ?anyTime .  
+                }
+            }
+        }
+    """ ;
+    :hasOptionEffectQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        CONSTRUCT {
+            $task :performedBy ?resource
+        } WHERE {}
+    """ .

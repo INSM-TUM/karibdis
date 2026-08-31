@@ -43,6 +43,11 @@ class BASE_PROCESS_ONTOLOGY(DefinedNamespace):
     writesValue : URIRef
     dataType : URIRef
 
+    DecisionType : URIRef
+    hasDecisionInstanceQuery : URIRef
+    hasDecisionOptionQuery : URIRef
+    hasOptionEffectQuery : URIRef
+
     _NS = Namespace(BASE_URL + 'baseontology/')
 
 

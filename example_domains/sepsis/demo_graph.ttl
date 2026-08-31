@@ -705,7 +705,7 @@ log:Resource_Y a :Resource ;
                 $this :instanceOf__hypothetical ?activity .\r
                 ?activity rdfs:label ?label .\r
                 FILTER regex(?label, "^Release", "i") .\r
-                $this :partOf / :ProcessValue_Disease <http://purl.obolibrary.org/obo/MONDO_1040015> . # Sepsis\r
+                $this :partOf / :ProcessValue_Disease <http://purl.obolibrary.org/obo/MONDO_1040015> . # Sepsis; TODO merge with SEPON Sepsis! (http://purl.bioontology.org/ontology/ICD9CM/995.91)\r
                 FILTER NOT EXISTS {\r
                     $this :partOf / ^:partOf / :instanceOf ?otheractivity .\r
                     FILTER(?otheractivity IN (log:Activity_Admission%20IC, log:Activity_Admission%20NC)) .\r
@@ -728,6 +728,73 @@ log:Resource_Y a :Resource ;
         """ ] ;
     sh:targetClass :Case,
         :Task .
+
+:OpenAssignmentsDecision a :DecisionType ;
+    rdfs:label "Decide Resource" ;
+    :hasDecisionInstanceQuery """\r
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>\r
+\r
+        SELECT ?task ?case ?activity\r
+        WHERE {\r
+            ?case a :Case .\r
+            ?task :partOf ?case .\r
+            ?task :instanceOf ?activity .\r
+            ?activity :canBeExecutedBy ?anyResourceConstraint . # TODO: Make dynamic based on whether the task actually needs assigned resources rather than who can do it\r
+            FILTER NOT EXISTS { ?task :performedBy ?anyResource }\r
+            FILTER NOT EXISTS { ?case :closedAt ?anytime}\r
+    } """ ;
+    :hasDecisionOptionQuery """\r
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>\r
+\r
+        SELECT ?resource\r
+        WHERE {\r
+            ?resource a :Resource . \r
+            FILTER NOT EXISTS { # TODO implicitly "available resources"\r
+                ?task :performedBy ?resource .  \r
+                FILTER NOT EXISTS { \r
+                    ?task :completedAt ?anyTime .  \r
+                }\r
+            }\r
+        }\r
+    """ ;
+    :hasOptionEffectQuery """\r
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>\r
+\r
+        CONSTRUCT {\r
+            $task :performedBy ?resource\r
+        } WHERE {}\r
+    """ .
+
+:OpenTasksDecision a :DecisionType ;
+    rdfs:label "Decide Activity" ;
+    :hasDecisionInstanceQuery """\r
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>\r
+\r
+        SELECT ?task ?case\r
+        WHERE {\r
+            ?case a :Case .\r
+            ?task :partOf ?case .\r
+            FILTER NOT EXISTS { ?task :instanceOf ?any }\r
+            FILTER NOT EXISTS {\r
+                ?case :closedAt ?anytime\r
+            }\r
+        }\r
+    """ ;
+    :hasDecisionOptionQuery """\r
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>\r
+\r
+        SELECT ?activity\r
+        WHERE {\r
+            ?activity a :Activity . \r
+        }\r
+    """ ;
+    :hasOptionEffectQuery """\r
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>\r
+\r
+        CONSTRUCT {\r
+            $task :instanceOf ?activity\r
+        } WHERE {}\r
+    """ .
 
 :PerformPreventiveTreatment a sh:PropertyShape ;
     sh:path :instanceOf__hypothetical ;
@@ -2156,6 +2223,16 @@ log:ProcessValue_SIRSCritTemperature a :ProcessValue,
     rdfs:label "Patient Name" ;
     :dataType xsd:string .
 
+:hasDecisionInstanceQuery a rdf:Property ;
+    rdfs:comment "A SPARQL query that returns all decision instances of this decision type." ;
+    rdfs:domain :DecisionType ;
+    rdfs:range xsd:string .
+
+:hasDecisionOptionQuery a rdf:Property ;
+    rdfs:comment "A SPARQL query that returns all decision options of this decision type." ;
+    rdfs:domain :DecisionType ;
+    rdfs:range xsd:string .
+
 rules:ExtendStaleCasesRule a sh:NodeShape ;
     sh:condition rules:ExtendStaleCasesRule ;
     sh:rule [ a sh:SPARQLRule ;
@@ -2181,11 +2258,13 @@ obo:MONDO_0000001 a owl:Class ;
     obo:IAO_0000115 "A disease is a disposition to undergo pathological processes that exists in an organism because of one or more disorders in that organism." ;
     oboInOwl:hasDbXref "DOID:4",
         "ICD9:799.9",
+        "MEDGEN:4347",
         "MESH:D004194",
         "NCIT:C2991",
         "OGMS:0000031",
         "Orphanet:377788",
-        "SCTID:64572001" ;
+        "SCTID:64572001",
+        "UMLS:C0012634" ;
     oboInOwl:hasExactSynonym "condition",
         "disease",
         "disease or disorder",
@@ -2198,8 +2277,10 @@ obo:MONDO_0000001 a owl:Class ;
         "other disease" ;
     oboInOwl:id "MONDO:0000001" ;
     oboInOwl:inSubset mondo:ordo_disorder ;
-    skos:exactMatch <http://identifiers.org/mesh/D004194>,
+    skos:exactMatch <http://identifiers.org/medgen/4347>,
+        <http://identifiers.org/mesh/D004194>,
         <http://identifiers.org/snomedct/64572001>,
+        <http://linkedlifedata.com/resource/umls/id/C0012634>,
         obo:DOID_4,
         obo:NCIT_C2991,
         <http://www.orpha.net/ORDO/Orphanet_377788> .
@@ -5423,6 +5504,16 @@ Sigosix""" ;
         default1:Interleukin,
         default1:Neonatal_Sepsis_Biomarker,
         default1:Paediatric_Sepsis_Diagnostic_Biomarker .
+
+:DecisionType a owl:Class ;
+    rdfs:label "Decision Type" ;
+    rdfs:comment "A recurring decision that can be made in a process" ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:cardinality 1 ;
+            owl:onProperty :hasDecisionInstanceQuery ],
+        [ a owl:Restriction ;
+            owl:cardinality 1 ;
+            owl:onProperty :hasDecisionOptionQuery ] .
 
 default1:Diagnostic_Biomarker a owl:Class ;
     rdfs:label "Diagnostic Biomarker" ;

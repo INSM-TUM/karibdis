@@ -86,50 +86,27 @@ class KGProcessEngine:
 
     
     def open_decisions(self):
-        open_next_activities_query = """
-            PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
-
-            SELECT ?task ?case
-            WHERE {
-                ?case a :Case .
-                ?task :partOf ?case .
-                FILTER NOT EXISTS { ?task :instanceOf ?any }
-                FILTER NOT EXISTS {
-                    ?case :closedAt ?anytime
-                }
-            }"""
-
-        open_next_activities = self.pkg.query(open_next_activities_query)
-        for task, case in open_next_activities:
-            yield Decision(self, task, BPO.instanceOf, {'case' : case, 'target_type': BPO.Activity})
-
-        
-        open_assignments_query = """
-            PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
-
-            SELECT ?task ?case ?activity
-            WHERE {
-                ?case a :Case .
-                ?task :partOf ?case .
-                ?task :instanceOf ?activity .
-                ?activity :canBeExecutedBy ?anyResourceConstraint .
-                FILTER NOT EXISTS { ?task :performedBy ?anyResource }
-                FILTER NOT EXISTS { ?case :closedAt ?anytime}
-            }"""
-        
-        # TODO: Make dynamic based on whether the task actually needs assigned resources
-
-        open_assignments = self.pkg.query(open_assignments_query)
-        for task, case, activity in open_assignments:
-            yield Decision(self, task, BPO.performedBy, {'case' : case, 'target_type': BPO.Resource, 'label_context' : self.pkg.label(activity)})
-
+        decision_types = self.pkg.query('''
+        SELECT ?dtype ?openDecisionQuery ?optionsQuery ?effectQuery WHERE {
+            ?dtype rdf:type :DecisionType .
+            ?dtype :hasDecisionInstanceQuery ?openDecisionQuery .
+            ?dtype :hasDecisionOptionQuery ?optionsQuery .
+            ?dtype :hasOptionEffectQuery ?effectQuery .
+        }
+        ''')
+        for type in decision_types:
+            open_decisions = self.pkg.query(type.openDecisionQuery).bindings
+            for decision_instance in open_decisions:
+                option_ids = self.pkg.query(type.optionsQuery, initBindings=decision_instance).bindings
+                option_effects = [list(self.pkg.query(type.effectQuery, initBindings={**decision_instance, **option})) for option in option_ids]
+                yield Decision(self, type.dtype, decision_instance, list(zip(option_ids, option_effects)))
 
 
     def handle_decision(self, decision_to_make, decision_result):
-        print(f'Made decision {str(decision_to_make.subject)} --{str(decision_to_make.predicate)}--> {str(decision_result)}')
-        triple_to_add = (decision_to_make.subject, decision_to_make.predicate, decision_result)
-        self.pkg.add(triple_to_add)
-        self.queue_event({'knowledge_updated': True, 'added': {triple_to_add}, 'deleted': set()})
+        print(f'Made decision {str(decision_to_make.decision_type)}, {str(decision_to_make.bindings)}--> {str(decision_result)}')
+        option_id, effect = decision_result
+        self.pkg += effect
+        self.queue_event({'knowledge_updated': True, 'added': effect, 'deleted': set()})
     
     def infer_decisions(self):
         open_decisions = self.open_decisions()
@@ -165,6 +142,7 @@ class KGProcessEngine:
 
         return decision
     
+    # @deprecated("For development purpose only")
     def human_decision(self, decision_to_make):
         print('The following options are recommended:')
         top_options = decision_to_make.get_top_k_results(k=5) # Get all options, even the ones that are not allowed
@@ -206,17 +184,17 @@ class KGProcessEngine:
         open_tasks = self.pkg.query(open_tasks_query)
         for task, case in open_tasks:
             yield (task, case)
-    
 
+    
 class Decision:
-    def __init__(self, engine, subject, predicate, context):
+    def __init__(self, engine, decision_type, bindings, options):
         self.engine = engine
         self.graph_to_check = engine.pkg
         self.shacl_graph = engine.pkg # TODO replace with appropriate partition
         self.ontology = None # TODO replace with appropriate ontology partition
-        self.subject = subject
-        self.predicate = predicate
-        self.context = context
+        self.decision_type = decision_type
+        self.bindings = bindings
+        self.options = options
 
         self.use_hypothetical = True # TODO make this configurable, e.g. via context
 
@@ -238,11 +216,7 @@ class Decision:
     
 
     def get_options(self):
-        target_type = self.context.get('target_type', BPO.Activity)
-        if target_type == BPO.Activity:
-            return list(self.engine.pkg.subjects(predicate=RDF.type, object=BPO.Activity))
-        elif target_type == BPO.Resource:
-            return list(self.graph_to_check.available_resources()) 
+        return self.options # TODO revisit notion of recalculating!
 
 
     def evaluate_option(self, option):
@@ -276,15 +250,16 @@ class Decision:
         return score, verdict
     
     def test_option(self, option):
-        hypothetical = (
-            (self.subject,
-            self.predicate + ('__hypothetical' if self.use_hypothetical else ''), #TODO magic string
-            option)
-        )
-    
-        assert hypothetical not in self.graph_to_check
+        option_id, effect = option
+        hypothetical = [
+            (subject,
+            predicate + ('__hypothetical' if self.use_hypothetical else ''), #TODO magic string
+            object) 
+        for subject, predicate, object in effect]
+        for hypothetical_triple in hypothetical:
+            assert hypothetical_triple not in self.graph_to_check
         try:
-            self.graph_to_check.add(hypothetical)
+            self.graph_to_check += hypothetical # TODO allow also effects that remove things
             
             r = validate(self.graph_to_check,
                 shacl_graph=self.shacl_graph,
@@ -298,9 +273,9 @@ class Decision:
                 inplace=True,
                 js=False,
                 debug=False,
-                focus_nodes=[self.subject])
+                focus_nodes=[*self.bindings.values()])
         finally:
-            self.graph_to_check.remove(hypothetical)
+            self.graph_to_check -= hypothetical
         
         # display(r)
         # print(results_text)

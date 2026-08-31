@@ -232,7 +232,7 @@ log:ProcessValue_Leucocytes
                 $this :instanceOf__hypothetical ?activity .
                 ?activity rdfs:label ?label .
                 FILTER regex(?label, "^Release", "i") .
-                $this :partOf / :ProcessValue_Disease <http://purl.obolibrary.org/obo/MONDO_1040015> . # Sepsis
+                $this :partOf / :ProcessValue_Disease <http://purl.obolibrary.org/obo/MONDO_1040015> . # Sepsis; TODO merge with SEPON Sepsis! (http://purl.bioontology.org/ontology/ICD9CM/995.91)
                 FILTER NOT EXISTS {
                     $this :partOf / ^:partOf / :instanceOf ?otheractivity .
                     FILTER(?otheractivity IN (log:Activity_Admission%20IC, log:Activity_Admission%20NC)) .

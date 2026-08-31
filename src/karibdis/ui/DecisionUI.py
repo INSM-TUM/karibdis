@@ -17,7 +17,7 @@ def DecisionUI(engine):
         set_decisions(list(engine.open_decisions()))
 
     def decision_label(decision):
-        return engine.pkg.label(decision.subject)
+        return engine.pkg.label(decision.bindings.get('task', None)) # TODO assumptions XXX
 
     def make_decision_view(decision):
         return DecisionBody(engine, decision, reload)
@@ -32,24 +32,24 @@ def DecisionUI(engine):
             reload, 
             decision_label ,  
             make_decision_view, 
-            item_equality=lambda decision_a, decision_b : (decision_a.subject == decision_b.subject) and (decision_a.predicate == decision_b.predicate),
+            item_equality=lambda decision_a, decision_b : (decision_a.decision_type == decision_b.decision_type) and (decision_a.bindings == decision_b.bindings) and (decision_a.options == decision_b.options),
             collection_name='Decisions'
         )
     return main
 
 @reacton.component
 def DecisionBody(engine, current_decision, reload):
-    context_case = current_decision.context.get('case', None)
-    context_type = current_decision.context.get('target_type', None)
-    label_context = current_decision.context.get('label_context', None)
+    context_case = current_decision.bindings.get('case', None) # TODO assumptions XXX
+    context_type = current_decision.decision_type
+    label_context = current_decision.bindings.get('activity', None) # TODO assumptions XXX
     with w.VBox(layout=w.Layout(overflow='scroll', height='60vh', width='100%')) as main:
         options, set_options = reacton.use_state([])
         reacton.use_effect(lambda: set_options(current_decision.get_top_k_results(20)), [current_decision])
-        v.CardTitle(children=f' Decide {engine.pkg.label(context_type)}' + (f' for {engine.pkg.label(context_case)}' if context_case else '') + (f' {label_context}' if label_context else ''), layout=w.Layout(flex='0 0 auto'))
+        v.CardTitle(children=f' {engine.pkg.label(context_type)}' + (f' for {engine.pkg.label(context_case)}' if context_case else '') + (f' {label_context}' if label_context else ''), layout=w.Layout(flex='0 0 auto'))
 
         for score, option, reasoning in options:
             with w.VBox(layout=w.Layout(border='solid #FAFAFA', margin='0.2%', padding='0.1%', flex='0 0 auto')):  
-                v.Label(children=f'{engine.pkg.label(option)} ({score})', style=LabelStyle(font_weight='bold', width='100%'))
+                v.Label(children=f'{", ".join([str(engine.pkg.label(v[-1])) for v in option[-1]])} ({score})', style=LabelStyle(font_weight='bold', width='100%')) # Could use option id bindings instead
                 for reason in reasoning:
                     w.Label(value=f'- {reason}') # TODO: Add single scores?
                 w.Button(description='Confirm', on_click=lambda option=option: [engine.handle_decision(current_decision, option), reload()])

@@ -10,6 +10,13 @@ from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
 
 from pyshacl import validate
 
+def _activity_option(decision, activity):
+    return next(filter(lambda op: op[0]['activity'] == activity, decision.options))
+def eval_activity_option(decision, activity):
+    return decision.evaluate_option(_activity_option(decision, activity))
+def handle_activity_decision(engine, decision, activity):
+    return engine.handle_decision(decision, _activity_option(decision, activity))
+
 
 
 class TestDefaultDeductions(unittest.TestCase):
@@ -70,9 +77,9 @@ class TestDefaultDeductions(unittest.TestCase):
         activity1 = URIRef('http://example.org/Activity_ER%20Registration')
         activity2 = URIRef('http://example.org/Activity_ER%20Triage')
         any_activity = URIRef('http://example.org/Activity_Any')
-        test_graph.add((activity1, BPO.instanceOf, BPO.Activity))
-        test_graph.add((activity2, BPO.instanceOf, BPO.Activity))
-        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity1, RDF.type, BPO.Activity))
+        test_graph.add((activity2, RDF.type, BPO.Activity))
+        test_graph.add((any_activity, RDF.type, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/choice'), activity2))
         
         engine.open_new_case()
@@ -80,10 +87,10 @@ class TestDefaultDeductions(unittest.TestCase):
         
         decision = next(engine.open_decisions())
         # Constrained activities are equally rewarded over other activities
-        self.assertEqual(decision.evaluate_option(activity1)[0], decision.evaluate_option(activity2)[0])
-        self.assertGreater(decision.evaluate_option(activity1)[0], decision.evaluate_option(any_activity)[0])
+        self.assertEqual(eval_activity_option(decision, activity1)[0], eval_activity_option(decision, activity2)[0])
+        self.assertGreater(eval_activity_option(decision, activity1)[0], eval_activity_option(decision, any_activity)[0])
         
-        engine.handle_decision(decision, activity1)
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
         
         new = self.get_deduced_triples(test_graph)
@@ -97,22 +104,24 @@ class TestDefaultDeductions(unittest.TestCase):
 
         activity1 = URIRef('http://example.org/Activity_ER%20Registration')
         activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        test_graph.add((activity1, RDF.type, BPO.Activity))
+        test_graph.add((activity2, RDF.type, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/responded_existence'), activity2))
 
         engine.open_new_case()
         engine.deduce()
         # Constraint not triggered yet; activity2 not rewarded
         decision = next(engine.open_decisions())
-        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
+        self.assertEqual(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
         
         decision = next(engine.open_decisions())
         # Constraint triggered; activity2 rewarded
-        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity2)
+        self.assertGreater(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity2)
         engine.complete_task(next(engine.open_tasks())[0])
         
         self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
@@ -124,30 +133,32 @@ class TestDefaultDeductions(unittest.TestCase):
 
         activity1 = URIRef('http://example.org/Activity_ER%20Registration')
         activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        test_graph.add((activity1, RDF.type, BPO.Activity))
+        test_graph.add((activity2, RDF.type, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/response'), activity2))
 
         engine.open_new_case()
         engine.deduce()
         # Constraint not triggered yet; activity2 not rewarded
         decision = next(engine.open_decisions())
-        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
+        self.assertEqual(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
         
         decision = next(engine.open_decisions())
         # Edge case: activity2 triggers first 
-        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
+        self.assertGreater(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity1), test_graph)
         
         decision = next(engine.open_decisions())
         # Constraint triggered; activity2 rewarded
-        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity2)
+        self.assertGreater(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity2)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_3'), BPO.instanceOf, activity2), test_graph)
@@ -158,14 +169,16 @@ class TestDefaultDeductions(unittest.TestCase):
         
         activity1 = URIRef('http://example.org/Activity_ER%20Registration')
         activity2 = URIRef('http://example.org/Activity_ER%20Triage')
+        test_graph.add((activity1, RDF.type, BPO.Activity))
+        test_graph.add((activity2, RDF.type, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/response'), activity2))
 
         engine.open_new_case()
         engine.deduce()
         # Constraint not triggered yet; activity2 not rewarded
         decision = next(engine.open_decisions())
-        self.assertEqual(decision.evaluate_option(activity1)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
+        self.assertEqual(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
@@ -173,23 +186,23 @@ class TestDefaultDeductions(unittest.TestCase):
         decision = next(engine.open_decisions())
         # Edge case: activity1 triggers twice 
         # Constraint triggered; activity2 not rewarded
-        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
+        self.assertGreater(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity1), test_graph)
         
         decision = next(engine.open_decisions())
         # Constraint still triggered; activity2 rewarded
-        self.assertGreater(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity2)
+        self.assertGreater(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity2)
         engine.complete_task(next(engine.open_tasks())[0])
 
         self.assertIn((URIRef('http://example.org/Task_1_3'), BPO.instanceOf, activity2), test_graph)
         
         decision = next(engine.open_decisions())
         # Constraint fulfilled for all instances; activity2 no longer rewarded
-        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
+        self.assertEqual(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
         
         
     def testDeclareNotRespondedExistence(self):
@@ -199,9 +212,9 @@ class TestDefaultDeductions(unittest.TestCase):
         activity1 = URIRef('http://example.org/Activity_ER%20Registration')
         activity2 = URIRef('http://example.org/Activity_ER%20Triage')
         any_activity = URIRef('http://example.org/Activity_Any')
-        test_graph.add((activity1, BPO.instanceOf, BPO.Activity))
-        test_graph.add((activity2, BPO.instanceOf, BPO.Activity))
-        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity1, RDF.type, BPO.Activity))
+        test_graph.add((activity2, RDF.type, BPO.Activity))
+        test_graph.add((any_activity, RDF.type, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/not_responded_existence'), activity2))
 
         for selected, not_selected in itertools.permutations([activity1, activity2]):
@@ -209,16 +222,16 @@ class TestDefaultDeductions(unittest.TestCase):
             engine.deduce()
             # Constraint not triggered yet; not selected activity not penalised
             decision = next(engine.open_decisions())
-            self.assertEqual(decision.evaluate_option(not_selected)[0], decision.evaluate_option(selected)[0])
-            engine.handle_decision(decision, selected)
-            engine.complete_task(decision.subject)
+            self.assertEqual(eval_activity_option(decision, not_selected)[0], eval_activity_option(decision, selected)[0])
+            handle_activity_decision(engine, decision, selected)
+            engine.complete_task(decision.bindings['task'])
             
             decision = next(engine.open_decisions())
             # Constraint triggered; not selected activity penalised
-            self.assertLess(decision.evaluate_option(not_selected)[0], decision.evaluate_option(selected)[0])
-            self.assertLess(decision.evaluate_option(not_selected)[0], decision.evaluate_option(any_activity)[0])
-            engine.handle_decision(decision, selected)
-            engine.complete_task(decision.subject)
+            self.assertLess(eval_activity_option(decision, not_selected)[0], eval_activity_option(decision, selected)[0])
+            self.assertLess(eval_activity_option(decision, not_selected)[0], eval_activity_option(decision, any_activity)[0])
+            handle_activity_decision(engine, decision, selected)
+            engine.complete_task(decision.bindings['task'])
             engine.close_case(case)
         
         
@@ -229,9 +242,9 @@ class TestDefaultDeductions(unittest.TestCase):
         activity1 = URIRef('http://example.org/Activity_ER%20Registration')
         activity2 = URIRef('http://example.org/Activity_ER%20Triage')
         any_activity = URIRef('http://example.org/Activity_Any')
-        test_graph.add((activity1, BPO.instanceOf, BPO.Activity))
-        test_graph.add((activity2, BPO.instanceOf, BPO.Activity))
-        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity1, RDF.type, BPO.Activity))
+        test_graph.add((activity2, RDF.type, BPO.Activity))
+        test_graph.add((any_activity, RDF.type, BPO.Activity))
         test_graph.add((activity1, URIRef('http://infs.cit.tum.de/karibdis/declare/precedence'), activity2))
 
         engine.open_new_case()
@@ -239,18 +252,18 @@ class TestDefaultDeductions(unittest.TestCase):
         
         decision = next(engine.open_decisions())
         # Precedence constraint not fulfilled; activity2 is penalised
-        self.assertEqual(decision.evaluate_option(activity1)[0], decision.evaluate_option(any_activity)[0])
-        self.assertLess(decision.evaluate_option(activity2)[0], decision.evaluate_option(activity1)[0])
-        engine.handle_decision(decision, activity1)
+        self.assertEqual(eval_activity_option(decision, activity1)[0], eval_activity_option(decision, any_activity)[0])
+        self.assertLess(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, activity1)[0])
+        handle_activity_decision(engine, decision, activity1)
         engine.complete_task(next(engine.open_tasks())[0])
         
         self.assertIn((URIRef('http://example.org/Task_1_1'), BPO.instanceOf, activity1), test_graph)
         
         # Precedence constraint fulfilled; activity2 no longer penalised
         decision = next(engine.open_decisions())
-        self.assertEqual(decision.evaluate_option(activity2)[0], decision.evaluate_option(any_activity)[0])
+        self.assertEqual(eval_activity_option(decision, activity2)[0], eval_activity_option(decision, any_activity)[0])
         
-        engine.handle_decision(decision, activity2)
+        handle_activity_decision(engine, decision, activity2)
         engine.complete_task(next(engine.open_tasks())[0])
         
         self.assertIn((URIRef('http://example.org/Task_1_2'), BPO.instanceOf, activity2), test_graph)
@@ -281,41 +294,41 @@ class TestDefaultDeductions(unittest.TestCase):
         test_graph = ProcessKnowledgeGraph()
         engine = KGProcessEngine(test_graph)
         once_activity = URIRef('http://example.org/Activity_Once')
-        test_graph.add((once_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((once_activity, RDF.type, BPO.Activity))
         test_graph.add((once_activity, URIRef('http://infs.cit.tum.de/karibdis/declare/exactly_one'), once_activity))
         also_once_activity = URIRef('http://example.org/Activity_Also_Once')
-        test_graph.add((also_once_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((also_once_activity, RDF.type, BPO.Activity))
         test_graph.add((also_once_activity, URIRef('http://infs.cit.tum.de/karibdis/declare/exactly_one'), also_once_activity))
         any_activity = URIRef('http://example.org/Activity_Any')
-        test_graph.add((any_activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((any_activity, RDF.type, BPO.Activity))
         engine.open_new_case()
         engine.deduce() # Creates new task
 
         decision = next(engine.open_decisions())
         # Activities still have to be executed
-        self.assertGreater(decision.evaluate_option(once_activity)[0], decision.evaluate_option(any_activity)[0])
-        self.assertGreater(decision.evaluate_option(also_once_activity)[0], decision.evaluate_option(any_activity)[0])
+        self.assertGreater(eval_activity_option(decision, once_activity)[0], eval_activity_option(decision, any_activity)[0])
+        self.assertGreater(eval_activity_option(decision, also_once_activity)[0], eval_activity_option(decision, any_activity)[0])
 
-        engine.handle_decision(decision, once_activity)
+        handle_activity_decision(engine, decision, once_activity)
         engine.complete_task(next(engine.open_tasks())[0])
         decision = next(engine.open_decisions())
         # One activity has been executed already
-        self.assertGreater(decision.evaluate_option(any_activity)[0], decision.evaluate_option(once_activity)[0])
-        self.assertGreater(decision.evaluate_option(also_once_activity)[0], decision.evaluate_option(any_activity)[0])
+        self.assertGreater(eval_activity_option(decision, any_activity)[0], eval_activity_option(decision, once_activity)[0])
+        self.assertGreater(eval_activity_option(decision, also_once_activity)[0], eval_activity_option(decision, any_activity)[0])
 
 
     def testLastCompleted(self):
         test_graph = ProcessKnowledgeGraph()
         engine = KGProcessEngine(test_graph)
         activity = URIRef('http://example.org/Activity_A')
-        test_graph.add((activity, BPO.instanceOf, BPO.Activity))
+        test_graph.add((activity, RDF.type, BPO.Activity))
 
         case = engine.open_new_case()
         engine.deduce() # Creates new task
-        engine.handle_decision(next(engine.open_decisions()), activity)
+        handle_activity_decision(engine, next(engine.open_decisions()), activity)
         engine.complete_task(next(engine.open_tasks())[0])
         engine.deduce() # Creates new task
-        engine.handle_decision(next(engine.open_decisions()), activity)
+        handle_activity_decision(engine, next(engine.open_decisions()), activity)
         second_task = next(engine.open_tasks())[0]
         engine.complete_task(second_task)
 

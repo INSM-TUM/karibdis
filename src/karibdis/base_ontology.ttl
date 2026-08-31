@@ -116,3 +116,33 @@
 :dataType rdf:type owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:domain :ProcessValue ;
     rdfs:comment "The data type of the process value, e.g. 'xsd:string' or 'xsd:integer'.".
+
+
+:DecisionType rdf:type owl:Class ;
+    rdfs:label "Decision Type" ;
+    rdfs:comment "A recurring decision that can be made in a process" ;
+    rdfs:subClassOf [
+        rdf:type owl:Restriction ;
+        owl:onProperty :hasDecisionInstanceQuery ;
+        owl:cardinality 1 ;
+    ] ;
+    rdfs:subClassOf [
+        rdf:type owl:Restriction ;
+        owl:onProperty :hasDecisionOptionQuery ;
+        owl:cardinality 1 ;
+    ] .
+
+:hasDecisionInstanceQuery a rdf:Property ;
+    rdfs:domain :DecisionType ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A SPARQL SELECT query that returns all decision instances of this decision type.".
+
+:hasDecisionOptionQuery a rdf:Property ;
+    rdfs:domain :DecisionType ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A SPARQL SELECT query that returns all decision options of this decision type.".
+
+:hasOptionEffectQuery
+    rdfs:domain :DecisionType ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A SPARQL CONSTRUCT query that returns all triples to be added for a given decision.".

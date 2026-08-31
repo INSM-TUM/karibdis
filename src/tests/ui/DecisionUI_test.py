@@ -25,7 +25,7 @@ def test_select_right_option(solara_test, page_session: Page):
     second_botton.click() 
     print(f'Selected activity: {activity}')
     def assert_correct_option_selected():
-        assert (decision.subject, BPO.instanceOf, engine.pkg.namespace_manager.expand_curie(activity)) in engine.pkg
+        assert (decision.bindings['task'], BPO.instanceOf, engine.pkg.namespace_manager.expand_curie(activity)) in engine.pkg
 
     wait_for(assert_correct_option_selected)
 
