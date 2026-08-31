@@ -44,7 +44,7 @@ def test_toast_manual_dismiss(solara_test, page_session: Page):
     alert = page_session.locator(".v-alert", has_text="dismiss me")
     expect(alert).to_be_visible()
 
-    alert.get_by_role("button").click()
+    page_session.locator(".v-alert", has_text="dismiss me").get_by_role("button").click()
     expect(page_session.get_by_text("dismiss me")).not_to_be_visible()
 
 
