@@ -16,4 +16,4 @@ def test_app_runs(solara_test, page_session: Page):
     expect(tablist.get_by_text('Knowledge Modeling')).to_be_visible()
     expect(tablist.get_by_text('Decisionmaking')).to_be_visible()
     expect(tablist.get_by_text('Task Execution')).to_be_visible()
-    expect(tablist.get_by_text('Explore Graph')).to_be_visible()
+    expect(tablist.get_by_text('Explore Graph')).to_be_visible() # TODO when running headed, is completely misplaced

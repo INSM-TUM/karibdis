@@ -24,9 +24,6 @@ from karibdis.KnowledgeGraphBPMS import KnowledgeGraphBPMS
 
    
 
-
-
-# =========================== APPLICATION SHELL ===========================
 class Application(ABC):
     def __init__(self):
         pass
@@ -67,18 +64,6 @@ class JupyterApplication(ipywidgets.Box):
 
     def run(self):
         self.display(self.base_view())
-
-            
-    class PrescriptionAndTaskUI2(ipywidgets.VBox):
-        def __init__(self):
-            super().__init__()
-            graph = draw_graph(ProcessKnowledgeGraph())
-            
-            # Extra Hack. See commend in utils.py 
-            with ipywidgets.Output():
-                display(graph)
-                clear_output()
-            self.children = [ipywidgets.Label("Prescription and Task UI"), graph]
 
 
 
