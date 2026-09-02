@@ -9,7 +9,7 @@ yfiles_jupyter_graphs
 voila
 reacton
 ipyvue
-ipyvuetify
+ipyvuetify<2  # 3.x wraps Vuetify 3 and renames props across the UI
 sentence_transformers
 langchain_openai
 dotenv

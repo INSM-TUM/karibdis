@@ -21,7 +21,7 @@ def toast(message, kind="error", timeout=6.0):
 @reacton.component
 def ToastItem(message, kind):
     """A single toast item. Auto-dismisses after a timeout, or can be dismissed by the user."""
-    return v.Alert(type=kind, dense=True, closable=True, class_='ma-0',
+    return v.Alert(type=kind, dense=True, dismissible=True, class_='ma-0',
                    style_='pointer-events:auto;min-width:300px;max-width:460px;',
                    children=[message])
 
