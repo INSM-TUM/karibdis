@@ -1,3 +1,4 @@
 -r requirements.txt
 starlette
 pytest-ipywidgets
+anyio<4.15  # solara's pytest plugin imports anyio.from_thread
