@@ -1,0 +1,230 @@
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix : <http://infs.cit.tum.de/karibdis/baseontology/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix log: <http://example.org/> . 
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix declare: <http://infs.cit.tum.de/karibdis/declare/> .
+
+
+
+:RemeasureHighLactateRegularlyRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Lactate levels should be re-measured every 2-4 hours if the last result is greater than 2mmol/L. Last measurement {?lactate_level} mmol/L at {?maxCompletedAt}." ;
+        sh:select """
+            SELECT  $this (5 AS ?value) ?lactate_level ?maxCompletedAt
+            WHERE {
+                $this :instanceOf__hypothetical log:Activity_Measure%20Blood%20Lactate .
+                $this :partOf ?case .
+                {
+                    SELECT (MAX(?completedAt) AS ?maxCompletedAt) WHERE {
+                        ?any_measuring :partOf ?case .
+                        ?any_measuring :completedAt ?completedAt .
+                        ?any_measuring log:ProcessValue_blood%20lactate ?xlactate_level .
+                    }
+                }
+                ?measuring :completedAt  ?maxCompletedAt .
+                ?measuring :partOf ?case .
+                ?measuring log:ProcessValue_blood%20lactate ?lactate_level .
+                FILTER((NOW() - "PT2H"^^xsd:duration) > ?maxCompletedAt) .
+                FILTER(?lactate_level > 2.0) . # TODO misses the 4 hours part
+            }
+        """ ;
+    ] .
+
+
+
+:MeasureLactateOnSepsisSuspicionRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Lactate levels should be measured in patients suspected of having sepsis." ; # TODO remove once already measured
+        sh:select """
+            SELECT  $this (5 AS ?value)
+            WHERE {
+                $this :instanceOf__hypothetical log:Activity_Measure%20Blood%20Lactate .
+                $this :partOf / :ProcessValue_suspected <http://purl.obolibrary.org/obo/MONDO_1040015> . # Sepsis
+            }
+        """ ;
+    ] .
+
+
+
+:SuspectSepsisOnSIRSRule a sh:NodeShape ;
+    sh:targetClass :Case ;
+    sh:rule [
+        a sh:SPARQLRule ;
+        sh:construct """
+            CONSTRUCT {
+                ?this :ProcessValue_suspected <http://purl.obolibrary.org/obo/MONDO_1040015>. # Sepsis 
+            } WHERE {
+                ?this log:ProcessValue_SIRSCriteria2OrMore true . 
+                ?this ^:partOf / log:ProcessValue_infection%20suspected true . 
+            }
+        """ ;
+    ] .
+
+
+:SIRSCriteria2OrMoreRule a sh:NodeShape ;
+    sh:targetClass :Case ;
+    sh:rule [
+        a sh:SPARQLRule ;
+        sh:construct """
+            CONSTRUCT {
+                ?this log:ProcessValue_SIRSCriteria2OrMore ?two_or_more.
+            } WHERE {
+                OPTIONAL {
+                    ?this log:ProcessValue_SIRSCritLeucos ?leucos .
+                    ?this log:ProcessValue_SIRSCritTachypnea ?tachypnea .
+                    ?this log:ProcessValue_SIRSCritHeartRate ?heartrate .
+                    ?this log:ProcessValue_SIRSCritTemperature ?temperature .
+                }
+                BIND(IF(?leucos = true, 1, 0) + IF(?tachypnea = true, 1, 0) + IF(?heartrate = true, 1, 0) + IF(?temperature = true, 1, 0) AS ?sirs_count) .
+                BIND(?sirs_count >= 2 AS ?two_or_more)
+            }
+        """ ;
+    ] .
+
+
+:SIRS_Metarule a sh:NodeShape ;
+    sh:targetClass :Case ;
+    sh:rule [
+        a sh:SPARQLRule ;
+        sh:construct """
+            CONSTRUCT {
+                $this ?criterion ?out_of_range . # TODO can never be updated
+            } WHERE { 
+                ?criterion a :SIRSCriterion .
+                ?criterion :biomarker ?biomarker .
+                ?criterion :range_from ?from .
+                ?criterion :range_to ?to .
+                ?task_or_this :partOf? $this.
+                ?task_or_this ?biomarker ?value .
+                BIND ( ?value < ?from || ?value > ?to AS ?out_of_range )
+            }
+        """ ;
+    ] .
+
+log:ProcessValue_SIRSCritLeucos a :SIRSCriterion ;
+    :range_from 4 ;
+    :range_to 12 ;
+    :biomarker log:ProcessValue_leukocyte%20count .
+
+log:ProcessValue_SIRSCritTachypnea a :SIRSCriterion ;
+    :range_from 0 ;
+    :range_to 20 ;
+    :biomarker log:ProcessValue_respiratory%20rate .
+
+log:ProcessValue_SIRSCritHeartRate a :SIRSCriterion ;
+    :range_from 0 ;
+    :range_to 90 ;
+    :biomarker log:ProcessValue_heart%20rate .
+
+log:ProcessValue_SIRSCritTemperature a :SIRSCriterion ;
+    :range_from 36 ;
+    :range_to 38 ;
+    :biomarker log:ProcessValue_body%20temperature .
+
+
+:AntimicrobialsSubDecision a :DecisionType ;
+    rdfs:subClassOf :OpenTasksDecision ; 
+    rdfs:label "Decide Activity" ;
+    :hasDecisionOptionQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        SELECT (log:Activity_Administer%20Antimicrobials AS ?activity) ?anti
+        WHERE {
+            ?anti rdfs:subClassOf+ <http://purl.bioontology.org/ontology/SNOMEDCT/373249005> .  # Anti-infective agent
+        }
+    """ ;
+    :hasOptionEffectQuery """
+        PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+
+        CONSTRUCT {
+            $task :instanceOf ?activity .
+            $task log:ProcessValue_administered%20agent ?anti  .
+        } WHERE {}
+    """ .
+
+
+:MRSACoverageRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Antimicrobials with MRSA coverage should be used exactly if the Risk for MRSA is high." ;
+        sh:select """
+            SELECT  $this (IF(?MRSA_risk, 5, -3) AS ?value)
+            WHERE {
+                $this :instanceOf__hypothetical log:Activity_Administer%20Antimicrobials .
+                BIND(EXISTS {  
+                    $this :partOf / log:ProcessValue_causative%20pathogen <http://purl.bioontology.org/ontology/SNOMEDCT/115329001> . # MRSA                
+                } AS ?MRSA_risk) # TODO: Proxy for risk
+
+                $this log:ProcessValue_administered%20agent__hypothetical / log:is_antiMRSA true .
+            }
+        """ ;
+    ] .
+
+
+:MDRGramNegativeCoverageRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Two gram-negative antimicrobials should be used exactly if the risk for multi-drug resistance is high and the causative pathogen is unknown." ;
+        sh:select """
+            SELECT  $this (IF(?MDR_risk && !?pathogen_known && ?count_already_administered_gram_negative < 2, 5, -2) AS ?value)
+            WHERE {
+                $this :instanceOf__hypothetical log:Activity_Administer%20Antimicrobials .
+                BIND(EXISTS {  
+                    $this :partOf / log:ProcessValue_multi-drug%20resistant%20risk true .                 
+                } AS ?MDR_risk) # TODO: Proxy for risk
+
+                BIND(EXISTS {  
+                    $this :partOf / log:ProcessValue_causative%20pathogen ?pathogen .                 
+                } AS ?pathogen_known) 
+
+                {
+                    SELECT (COUNT(distinct ?already_administered_agent) as ?count_already_administered_gram_negative)
+                    WHERE {
+                        $this :partOf / ^:partOf / log:ProcessValue_administered%20agent ?already_administered_agent .
+                        ?already_administered_agent log:is_gram_negative true .
+                    }
+                }
+
+                $this log:ProcessValue_administered%20agent__hypothetical / log:is_gram_negative true .
+            }
+        """ ;
+    ] .
+
+
+
+:AntifungalsRule a sh:PropertyShape ;
+    sh:targetClass :Task ;
+    sh:path :instanceOf__hypothetical;
+    sh:severity sh:Info;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "Antifungals should be used exactly if the risk for a fungal infection is high." ;
+        sh:select """
+            SELECT  $this (IF(?fungus_risk, 5, -2) AS ?value)
+            WHERE {
+                $this :instanceOf__hypothetical log:Activity_Administer%20Antimicrobials .
+                BIND(EXISTS {  
+                    $this :partOf / log:ProcessValue_causative%20pathogen / rdfs:subClassOf+ <http://purl.bioontology.org/ontology/SNOMEDCT/414561005> . # Fungus                
+                } AS ?fungus_risk) # TODO: Proxy for risk
+
+                $this log:ProcessValue_administered%20agent__hypothetical / rdfs:subClassOf+ <http://purl.bioontology.org/ontology/SNOMEDCT/373219008> . # Antifungal
+            }
+        """ ;
+    ] .

@@ -1,0 +1,35 @@
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix : <http://example.org/> . 
+
+
+<http://purl.bioontology.org/ontology/SNOMEDCT/373249005> a owl:Class . # Anti-infective agent
+
+<http://purl.bioontology.org/ontology/SNOMEDCT/419241000> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/373249005> . # Antibacterial
+<http://purl.bioontology.org/ontology/SNOMEDCT/372735009> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> ; # Vancomycin
+    :is_antiMRSA true . 
+    # No gram-negative coverage
+<http://purl.bioontology.org/ontology/SNOMEDCT/372670001> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> ; # Ceftriaxone
+    :is_antiMRSA false ;
+    :is_gram_negative true .
+<http://purl.bioontology.org/ontology/SNOMEDCT/372836004> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> ; # Piperacillin
+#    :is_antiMRSA false ;
+    :is_gram_negative true .
+<http://purl.bioontology.org/ontology/SNOMEDCT/96048006> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> ; # Cefepime
+    :is_antiMRSA false ;
+    :is_gram_negative true .
+<http://purl.bioontology.org/ontology/SNOMEDCT/372602008> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> . # Metronidazole
+
+
+<http://purl.bioontology.org/ontology/SNOMEDCT/373219008> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/373249005> . # Antifungal
+<http://purl.bioontology.org/ontology/SNOMEDCT/387174006> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/373219008> . # Fluconazole
+<http://purl.bioontology.org/ontology/SNOMEDCT/373570003> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/373219008> . # Echinocandin
+
+
+<http://purl.bioontology.org/ontology/SNOMEDCT/41146007> a owl:Class . # Bacterium
+<http://purl.bioontology.org/ontology/SNOMEDCT/115329001> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/41146007> . # MRSA
+<http://purl.bioontology.org/ontology/SNOMEDCT/112283007> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/41146007> . # ECOLI
+
+<http://purl.bioontology.org/ontology/SNOMEDCT/414561005> a owl:Class . # Fungus
+<http://purl.bioontology.org/ontology/SNOMEDCT/53326005> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/414561005> . # Candida
