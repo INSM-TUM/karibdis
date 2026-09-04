@@ -9,8 +9,9 @@ import reacton.ipywidgets as w
 import reacton.ipyvuetify as v
 
 
-from karibdis.ui.ui_util import QueryBox, TextEditor, format_query
+from karibdis.ui.ui_util import QueryBox, TextEditor, format_query, use_busy, use_be_busy, BusyOverlay, BusyExempt, GraphViz
 from karibdis.util.async_import import async_import
+from karibdis.ui import toast
 pm4py = async_import("pm4py")
 
 from karibdis.utils import *
@@ -52,91 +53,90 @@ def ActiveImportUI(source, set_source, pkg):
     stage, set_stage = reacton.use_state(EXTRACT)
     importer, set_importer = reacton.use_state(None)
     count, set_count = reacton.use_state(0)
-    is_processing, set_processing = reacton.use_state(False)
-
-    def be_busy_with(executable):
-        set_processing(True)
-        executable()
-        set_processing(False)
+    is_processing, be_busy_with = use_busy()
+    title, set_title = reacton.use_state('')
+    subtitle, set_subtitle = reacton.use_state('')
 
     def terminate():
         set_count(0)
         set_stage(None)
         set_importer(None)
         set_source(None)
-        
+
     def complete():
-        be_busy_with(importer.load)
-        print('Data successfully loaded into the knowledge graph.') # TODO Maybe send nice alert to user
-        terminate()
-        
+        def _on_load_done(_):
+            toast('Data successfully loaded into the knowledge graph.', kind='success')
+            terminate()
+        be_busy_with(importer.load, on_done=_on_load_done)
+
     def cancel():
         print('Canceled')
         terminate()
-    
-    w.Label(value=f"Import from {source}. Currently importing {count} tuples. Importer: {importer}. Stage: {stage}. {'processing...' if is_processing else ''}")
 
-    with w.Box(): # Needs its own box, as otherwise would lead to a whole reload of normal view, which leads to loss of data
-        if is_processing:
-            w.Label(value="PROCESSING") # TODO nice loading wheel that blocks inputs
-    with v.Card(layout = ipywidgets.Layout(width='100%', height='100%')): 
-        title, set_title = reacton.use_state('')
-        subtitle, set_subtitle = reacton.use_state('')
-        v.CardTitle(children=title)
-        v.CardSubtitle(children=subtitle)
+    def render_view():
+        w.Label(value=f"Import from {source}. Currently importing {count} tuples. Importer: {importer}. Stage: {stage}.")
 
-        if stage == EXTRACT:
-            set_title(f'Extraction from {source}')
+        with v.Card(layout = ipywidgets.Layout(width='100%', height='100%')):
+            v.CardTitle(children=title)
+            v.CardSubtitle(children=subtitle)
 
-            with v.CardText():
+            if stage == EXTRACT:
+                set_title(f'Extraction from {source}')
 
-                def run_extraction(extraction_routine):
-                    be_busy_with(extraction_routine)
-                    set_count(len(importer.addition_graph))
-                    set_stage(ALIGN)
+                with v.CardText():
 
-                if importer is None:
-                    if source == TEXT:
-                        _importer = TextualImporter(pkg)
+                    def run_extraction(extraction_routine):
+                        def _on_extract_done(_):
+                            set_count(len(importer.addition_graph))
+                            set_stage(ALIGN)
+                        be_busy_with(extraction_routine, on_done=_on_extract_done)
+
+                    if importer is None:
+                        if source == TEXT:
+                            _importer = TextualImporter(pkg)
+                        elif source == EVENT_LOG:
+                            _importer = SimpleEventLogImporter(pkg)
+                        elif source == EXISTING_ONTOLOGY:
+                            _importer = ExistingOntologyImporter(pkg)
+                        else:
+                            raise ValueError(f'Unknown source {source}')
+                        set_importer(_importer)
+                        print('Constructed Importer')
+
+                    elif source == TEXT:
+                        TextExtractionUI(importer, set_subtitle, run_extraction)
+
                     elif source == EVENT_LOG:
-                        _importer = SimpleEventLogImporter(pkg)
+                        EventLogExtractionUI(importer, set_subtitle, run_extraction)
+
                     elif source == EXISTING_ONTOLOGY:
-                        _importer = ExistingOntologyImporter(pkg)
-                    else:
-                        raise ValueError(f'Unknown source {source}')
-                    set_importer(_importer)
-                    print('Constructed Importer')
+                        ExistingOntologyExtractionUI(importer, set_subtitle, run_extraction)
 
-                elif source == TEXT:
-                    TextExtractionUI(importer, set_subtitle, be_busy_with, run_extraction)
-                
-                elif source == EVENT_LOG:
-                    EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction)
-                                
-                elif source == EXISTING_ONTOLOGY:
-                    ExistingOntologyExtractionUI(importer, set_subtitle, be_busy_with, run_extraction)
+            elif stage == ALIGN:
+                set_title(f'Align')
+                set_subtitle(f'Importing from {source}')
+                AlignmentUI(importer, set_stage)
 
-    
-        elif stage == ALIGN:
-            set_title(f'Align')
-            set_subtitle(f'Importing from {source}')
-            AlignmentUI(importer, set_stage, be_busy_with)
-                
-        elif stage == VALIDATE:
-            set_title(f'Validate')
-            set_subtitle(f'Importing from {source}')
-            ValidationView(importer, complete, set_stage)
-        
-    w.Button(description="Cancel Knowledge Import", on_click=cancel, layout=w.Layout(flex='0 0 auto'))
+            elif stage == VALIDATE:
+                set_title(f'Validate')
+                set_subtitle(f'Importing from {source}')
+                ValidationView(importer, complete, set_stage)
+
+        BusyExempt(lambda: w.Button(description="Cancel Knowledge Import", on_click=cancel,
+                                    layout=w.Layout(flex='0 0 auto')))
+
+    with w.VBox() as main:
+        BusyOverlay(is_processing, render_view, be_busy_with=be_busy_with)
+    return main
 
 @reacton.component
-def TextExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
+def TextExtractionUI(importer, set_subtitle, run_extraction):
+    _, be_busy_with = use_be_busy()
     text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test')
     rulesloading, set_rulesloading = reacton.use_state(False)
 
-    def import_rules(): # TODO add busy-ness
-        importer.import_rules_from_statement(text)
-        set_rulesloading(True)    
+    def import_rules():
+        be_busy_with(lambda: importer.import_rules_from_statement(text), on_done=lambda _: set_rulesloading(True))
 
     w.Textarea(value=text, on_value=set_text, rows=10, layout = ipywidgets.Layout(width='98%'))
     with w.HBox():
@@ -163,7 +163,8 @@ def TextExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
         run()
 
 @reacton.component
-def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
+def EventLogExtractionUI(importer, set_subtitle, run_extraction):
+    _, be_busy_with = use_be_busy()
     log, set_log = reacton.use_state(None)
     done_with_columns, set_done_with_columns = reacton.use_state(False)
     if log is None:
@@ -190,8 +191,7 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
         dirty, set_dirty = reacton.use_state(False)
 
         def complete_column_import():
-            be_busy_with(lambda: importer.import_event_log_entities(log))
-            set_done_with_columns(True)
+            be_busy_with(lambda: importer.import_event_log_entities(log), on_done=lambda _: set_done_with_columns(True))
         
         def change_col_type(column, value):
             if value == 'ENTITY':
@@ -308,12 +308,12 @@ def DiscoveryUI(importer, log, run_extraction):
             w.Button(description="Adapt Parameters", on_click=lambda: set_declare(None))  
 
 @reacton.component
-def ExistingOntologyExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
+def ExistingOntologyExtractionUI(importer, set_subtitle, run_extraction):
     ontology, set_ontology = reacton.use_state(None)
     prompt_url, set_prompt_url = reacton.use_state(False)
 
     if ontology is not None:
-        QueryView(ontology, be_busy_with, callback_accept=lambda subgraph: run_extraction(lambda: importer.accept_filtered_result(subgraph, ontology)))
+        QueryView(ontology, callback_accept=lambda subgraph: run_extraction(lambda: importer.accept_filtered_result(subgraph, ontology)))
     elif not prompt_url: 
         def upload(files):
             file = files[0]
@@ -353,7 +353,8 @@ def ExistingOntologyExtractionUI(importer, set_subtitle, be_busy_with, run_extra
 
 # =========================== SHARED UI ===========================
 @reacton.component
-def QueryView(graph, be_busy_with, initial_query=None, callback_accept=None):
+def QueryView(graph, initial_query=None, callback_accept=None):
+    _, be_busy_with = use_be_busy()
 
 
     with w.VBox(layout = ipywidgets.Layout(width='100%', height='98%')) as main:  
@@ -374,18 +375,15 @@ def QueryView(graph, be_busy_with, initial_query=None, callback_accept=None):
                 button_accept = w.Button(description='Load Data', on_click=accept)
 
             else:
-                def edit(b=None):
-                    button_edit.disabled = True
-                    run_query()
-                    button_edit.disabled = False
-                button_edit = w.Button(description='Test Query', on_click=lambda : be_busy_with(edit))
+                button_edit = w.Button(description='Test Query', on_click=lambda: be_busy_with(run_query))
 
         # TODO one initial edit
 
     return main
 
 @reacton.component
-def AlignmentUI(importer, set_stage, be_busy_with):
+def AlignmentUI(importer, set_stage):
+    _, be_busy_with = use_be_busy()
     alignment, set_alignment = reacton.use_state([])
 
     def apply_alignment(accepted_alignment):
@@ -393,7 +391,7 @@ def AlignmentUI(importer, set_stage, be_busy_with):
         set_stage(VALIDATE)
     with w.VBox() as main:
         AlignmentView(importer, alignment, apply_alignment)
-        w.Button(description="Automated Alignment", on_click=lambda: be_busy_with(lambda: set_alignment(importer.determine_alignment())))  
+        w.Button(description="Automated Alignment", on_click=lambda: be_busy_with(importer.determine_alignment, on_done=set_alignment))
     return main
 
 @reacton.component
@@ -431,17 +429,10 @@ def ValidationView(importer, callback_done, set_stage=None):
                 if set_stage is not None:
                     w.Button(description='Go back to Alignment', on_click=lambda: set_stage(ALIGN))
                 # w.Button(description='Cancel')
-            if len(importer.addition_graph) == 0:
-                w.Label(value='No data to visualize.')
-            elif len(importer.addition_graph.all_nodes()) > 600:
-                w.Label(value=f'Too many nodes ({len(importer.addition_graph.all_nodes())}) to visualize.')
-            else:
-                graph = visualize_addition_graph(importer)
-                display(graph)
+            GraphViz(
+                importer.addition_graph,
+                color_func=lambda _: dict(zip_longest(importer.addition_graph.all_nodes() - importer.pkg.all_nodes(), [], fillvalue='#99AA00')),
+            )
         else:
             TextEditor(importer, importer.serialize(format='ttl'), set_editing)
     return main
-
-
-def visualize_addition_graph(importer): # TODO Partial duplicate to GraphViz
-    return draw_graph(importer.addition_graph, color_func=lambda _: dict(zip_longest(importer.addition_graph.all_nodes() - importer.pkg.all_nodes(), [], fillvalue='#99AA00')))

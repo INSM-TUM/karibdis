@@ -7,7 +7,7 @@ import reacton.ipywidgets as w
 import reacton.ipyvuetify as v
 
 from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
-from karibdis.ui.ui_util import SelectionMenu
+from karibdis.ui.ui_util import SelectionMenu, use_be_busy
 from karibdis.utils import *
 from rdflib import Literal, RDFS, XSD
 from rdflib.paths import ZeroOrMore
@@ -26,33 +26,37 @@ def TaskExecutionUI(engine):
 
     def make_task_view(task):
         return TaskBody(engine, task, reload)
-    
+
     with w.VBox() as main:
         with w.HBox():
             w.Button(description="Open new case", on_click=lambda: (engine.open_new_case(), reload()))
         SelectionMenu(
-            "Task Execution", 
-            tasks, 
-            set_tasks, 
-            reload, 
-            task_label ,  
+            "Task Execution",
+            tasks,
+            set_tasks,
+            reload,
+            task_label ,
             make_task_view,
-            collection_name='Tasks'
+            item_equality=lambda a, b: a[0] == b[0] and a[1] == b[1],
+            collection_name='Tasks',
+            lock_selection_while_busy=True
         )
     return main
 
 @reacton.component
 def TaskBody(engine, current_task_case, reload):
-    
+
     pkg = engine.pkg
 
     current_task, current_case = current_task_case
     current_task_ref = reacton.use_ref(None)
     current_task_ref.current = current_task
 
-    current_case_ref = reacton.use_ref(None)  
+    current_case_ref = reacton.use_ref(None)
     current_case_ref.current = current_case
-   
+    _, be_busy_with = use_be_busy()
+    be_busy_with_ref = reacton.use_ref(be_busy_with)
+    be_busy_with_ref.current = be_busy_with
     pv_values, set_pv_values = reacton.use_state({})
     pv_values_ref = reacton.use_ref({})
     pv_values_ref.current = pv_values
@@ -81,15 +85,16 @@ def TaskBody(engine, current_task_case, reload):
     # --- Handlers ---
     def _make_handlers():
         def on_submit_click():
-            for pv, vals in pv_values_ref.current.items():
-                meta = get_attr(pkg, pv)
-                for ev in list(pkg.objects(subject=current_case_ref.current, predicate=pv)):
-                    pkg.remove((current_case_ref.current, pv, ev))
-                for val in vals:
-                    if val is not None and val != EMPTY_ENTITY:
-                        pkg.add((current_case_ref.current, pv, val if meta.is_entity else Literal(val, datatype=meta.attr_type)))
-            engine.complete_task(current_task_ref.current)
-            reload()
+            def _do_submit():
+                for pv, vals in pv_values_ref.current.items():
+                    meta = get_attr(pkg, pv)
+                    for ev in list(pkg.objects(subject=current_case_ref.current, predicate=pv)):
+                        pkg.remove((current_case_ref.current, pv, ev))
+                    for val in vals:
+                        if val is not None and val != EMPTY_ENTITY:
+                            pkg.add((current_case_ref.current, pv, val if meta.is_entity else Literal(val, datatype=meta.attr_type)))
+                engine.complete_task(current_task_ref.current)
+            be_busy_with_ref.current(_do_submit, on_done=lambda _: reload())
         
         def on_widget_change(pv, idx):
             def handler(new_value):
