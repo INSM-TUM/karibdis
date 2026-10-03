@@ -5,7 +5,7 @@ import reacton.ipyvuetify as v
 
 from ipywidgets.widgets.widget_string import LabelStyle
 
-from karibdis.ui.ui_util import SelectionMenu, use_be_busy
+from karibdis.ui.ui_util import SelectionMenu, use_busy
 from karibdis.utils import *
 
 
@@ -26,10 +26,9 @@ def DecisionUI(engine):
         with w.HBox():
             w.Button(description="Open new case", on_click=lambda: (engine.open_new_case(), reload()))
         SelectionMenu(
-            "Decisionmaking", 
-            decisions, 
-            set_decisions, 
-            reload, 
+            "Decisionmaking",
+            decisions,
+            reload,
             decision_label ,  
             make_decision_view, 
             item_equality=lambda decision_a, decision_b : (decision_a.decision_type == decision_b.decision_type) and (decision_a.bindings == decision_b.bindings) and (decision_a.options == decision_b.options),
@@ -39,7 +38,7 @@ def DecisionUI(engine):
 
 @reacton.component
 def DecisionBody(engine, current_decision, reload):
-    _, be_busy_with = use_be_busy()
+    _, be_busy_with = use_busy()
     context_case = current_decision.bindings.get('case', None) # TODO assumptions XXX
     context_type = current_decision.decision_type
     label_context = current_decision.bindings.get('activity', None) # TODO assumptions XXX
@@ -48,7 +47,7 @@ def DecisionBody(engine, current_decision, reload):
 
     def load_options():
         set_options([])
-        be_busy_with(lambda: current_decision.get_top_k_results(20), on_done=lambda r: set_options(r or []))
+        be_busy_with(lambda: set_options(current_decision.get_top_k_results(20)))
     reacton.use_effect(load_options, [current_decision])
 
     with w.VBox(layout=w.Layout(overflow='scroll', height='60vh', width='100%')) as main:
@@ -62,13 +61,12 @@ def DecisionBody(engine, current_decision, reload):
                 w.Button(
                     description='Confirm',
                     on_click=lambda option=option: be_busy_with(
-                        lambda: engine.handle_decision(current_decision, option),
-                        on_done=lambda _: reload(),
-                    ),
+                        lambda: [engine.handle_decision(current_decision, option), reload()]),
                 )
         if context_case is not None:
             w.Button(
                 description='Close Case',
-                on_click=lambda: be_busy_with(lambda: engine.close_case(context_case), on_done=lambda _: reload()),
+                on_click=lambda: be_busy_with(lambda: [engine.close_case(context_case), reload()]),
                 layout=w.Layout(flex='0 0 auto'),
             )
+    return main

@@ -12,96 +12,116 @@ import uuid
 from pyparsing import ParseException
 import json
 
+from karibdis.ui.toast import toast
 from karibdis.utils import *
 
 
-def _run_on_thread(executable, on_done, on_finish):
-    """Runs `executable` on a daemon thread, then applies `on_done(result)` and 
-    finally `on_finish()` to clear the busy state -- in that order, so the outcome
-    lands in the same frame the overlay disappears."""
+_SCRIM_Z = 5
+_EXEMPT_Z = _SCRIM_Z + 1
+_SCRIM_OPACITY = 0.6
+_SPINNER_SIZE = 48
+_SPINNER_COLOR = 'primary'
+
+
+def _run_in_background(executable, clear_busy):
+    """Runs `executable` on a daemon thread and clears the busy state afterwards, whatever
+    happens. Failures are surfaced as a toast rather than a print, which is invisible
+    under Voila. `executable` runs off the render thread: calling reacton state setters
+    from it is fine, touching widgets directly is not."""
     def _worker():
-        result = None
         try:
-            result = executable()
+            executable()
         except Exception as e:
-            print(f'Error in background task: {e}')
-        if on_done is not None:
-            on_done(result)
-        on_finish()
+            toast(f'Background task failed: {e}', kind='error')
+        finally:
+            clear_busy()
 
     threading.Thread(target=_worker, daemon=True).start()
 
-_busy_context = reacton.create_context((False, None))
+
+def _run_inline(executable):
+    """Fallback used when no busy scope is mounted, so every component stays renderable
+    on its own (in tests, notebooks, or as a standalone widget). No thread, no overlay."""
+    executable()
 
 
-def use_be_busy():
-    """Hook for any component doing slow work: returns (is_busy, be_busy_with) from the
-    nearest enclosing busy scope. Route calls through be_busy_with(executable,
-    on_done=None) and the enclosing scope will show the spinner and block the input."""
-    return _busy_context.use()
+_busy_context = reacton.create_context((False, _run_inline))
 
 
 def use_busy():
-    """Hook for a component that owns a busy scope and must also trigger work from its own
-    render scope. Pass the returned runner to BusyOverlay(be_busy_with=...) so descendants share it."""
+    """Hook for any component doing slow work: returns (is_busy, be_busy_with) from the
+    nearest enclosing BusyScope. Route slow work through be_busy_with(executable) and the
+    scope shows the spinner and blocks input until it returns. Outside a scope the
+    executable simply runs inline."""
+    return _busy_context.use()
+
+
+@reacton.component
+def _Scrim(is_busy, render_content, scrim=True):
+    """Blocks clicks on whatever `render_content` creates while `is_busy`, and dims it
+    unless `scrim=False`. Knows nothing about who started the work."""
+    style = 'position:relative; width:100%;' + (' pointer-events:none;' if is_busy else '')
+    with v.Html(tag='div', style_=style) as main:
+        render_content()
+        if scrim:
+            with v.Overlay(
+                contained=True,
+                model_value=is_busy,
+                persistent=True,
+                no_click_animation=True,
+                scrim='white',
+                opacity=_SCRIM_OPACITY,
+                z_index=_SCRIM_Z,
+                content_class='w-100 h-100 d-flex align-center justify-center',
+            ):
+                v.ProgressCircular(indeterminate=True, size=_SPINNER_SIZE, width=6, color=_SPINNER_COLOR)
+    return main
+
+
+@reacton.component
+def _BusyOverlay(is_busy, render_content, be_busy_with):
+    """A busy scope over caller-owned state: draws the scrim and publishes
+    (is_busy, be_busy_with) to descendants. Use BusyScope unless you own the state."""
+    _busy_context.provide((is_busy, be_busy_with))
+    return _Scrim(is_busy, render_content)
+
+
+@reacton.component
+def BusyScope(render_content):
+    """Marks a region as one unit of work. Everything `render_content` creates is blocked
+    and dimmed while work started via use_busy() inside it is running."""
     busy, set_busy = reacton.use_state(False)
     busy_ref = reacton.use_ref(False)
 
     def _make_runner():
-        def be_busy_with(executable, on_done=None):
+        def be_busy_with(executable):
             if busy_ref.current:  # re-entrant trigger while busy: ignore
                 return
             busy_ref.current = True
             set_busy(True)
 
-            def _finish():
+            def _clear():
                 busy_ref.current = False
                 set_busy(False)
 
-            _run_on_thread(executable, on_done, _finish)
+            _run_in_background(executable, _clear)
         return be_busy_with
 
-    # Memoised so the provided context value only changes when `busy` does.
-    return busy, reacton.use_memo(_make_runner, [])
-
-
-@reacton.component
-def BusyOverlay(is_busy, render_content, be_busy_with=None, spinner=True,
-                size=48, color='primary', opacity=0.6, z_index=5):
-    """A busy scope with externally supplied state. Everything `render_content` creates is
-    blocked while `is_busy`, and descendants get (is_busy, be_busy_with) from use_be_busy()."""
-    if be_busy_with is not None:
-        _busy_context.provide((is_busy, be_busy_with))
-
-    style = 'position:relative; width:100%;' + (' pointer-events:none;' if is_busy else '')
-    with v.Html(tag='div', style_=style) as main:
-        render_content()
-        with v.Overlay(
-            contained=True,
-            model_value=is_busy,
-            persistent=True,
-            no_click_animation=True,
-            scrim='white',
-            opacity=opacity,
-            z_index=z_index,
-            content_class='w-100 h-100 d-flex align-center justify-center',
-        ):
-            if spinner:
-                v.ProgressCircular(indeterminate=True, size=size, width=6, color=color)
-    return main
+    return _BusyOverlay(busy, render_content, reacton.use_memo(_make_runner, []))
 
 
 @reacton.component
 def BusyExempt(render_content):
     """An island inside a busy scope that stays interactive while everything around it is
     blocked. Re-enables pointer events and lifts above the scrim."""
-    with v.Html(tag='div', style_='pointer-events:auto; position:relative; z-index:6; width:fit-content;') as main:
+    style = f'pointer-events:auto; position:relative; z-index:{_EXEMPT_Z}; width:fit-content;'
+    with v.Html(tag='div', style_=style) as main:
         render_content()
     return main
 
 
 @reacton.component
-def SelectionMenu(title, items, set_items, reload, item_label, make_item_view, item_equality = lambda a,b : a is b, collection_name='items', lock_selection_while_busy=False):
+def SelectionMenu(title, items, reload, item_label, make_item_view, item_equality = lambda a,b : a is b, collection_name='items', lock_selection_while_busy=False):
     current_item, set_current_item = reacton.use_state(next(iter(items), None))
     reacton.use_effect(lambda: set_current_item(next(iter(items), None)), [items])
 
@@ -111,18 +131,19 @@ def SelectionMenu(title, items, set_items, reload, item_label, make_item_view, i
         set_busy_items(lambda old: [b for b in old if any(item_equality(b, it) for it in items)])
     reacton.use_effect(_prune_stale_busy, [items])
 
-    def be_busy_with_item(item, executable, on_done=None):
+    def be_busy_with_item(item, executable):
         if any(item_equality(item, b) for b in busy_items):
             return
         set_busy_items(lambda old: old + [item])
-        _run_on_thread(executable, on_done,
-                       lambda: set_busy_items(lambda old: [b for b in old if not item_equality(b, item)]))
+        _run_in_background(
+            executable,
+            lambda: set_busy_items(lambda old: [b for b in old if not item_equality(b, item)]))
 
     current_is_busy = current_item is not None and any(item_equality(current_item, b) for b in busy_items)
     selection_locked = lock_selection_while_busy and current_is_busy
 
     def render_menu():
-        with v.Card():
+        with v.Card(flat=True):
             v.CardTitle(children=title)
             with v.CardText():
                 if len(items) > 0 and current_item is not None:
@@ -135,11 +156,10 @@ def SelectionMenu(title, items, set_items, reload, item_label, make_item_view, i
                                     on_click=lambda item=item: set_current_item(item),
                                     style=w.ButtonStyle(button_color='#DDEEFF' if item_equality(item, current_item) else None)
                                 )
-                        # The pane is its own busy scope, bound to the selected item.
-                        BusyOverlay(
+                        _BusyOverlay(
                             current_is_busy,
                             lambda: make_item_view(current_item),
-                            be_busy_with=lambda executable, on_done=None, _item=current_item: be_busy_with_item(_item, executable, on_done),
+                            lambda executable, _item=current_item: be_busy_with_item(_item, executable),
                         )
                 else:
                     w.Label(value=f'No {collection_name} to select')
@@ -147,7 +167,7 @@ def SelectionMenu(title, items, set_items, reload, item_label, make_item_view, i
         w.Button(description=f'Reload {collection_name}', on_click=reload, layout=w.Layout(flex='0 0 auto'))
 
     with w.VBox() as main:
-        BusyOverlay(selection_locked, render_menu, spinner=False, opacity=0.15)
+        _Scrim(selection_locked, render_menu, scrim=False)
     return main
 
 

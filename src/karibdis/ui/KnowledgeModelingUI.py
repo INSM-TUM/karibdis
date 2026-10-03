@@ -9,9 +9,9 @@ import reacton.ipywidgets as w
 import reacton.ipyvuetify as v
 
 
-from karibdis.ui.ui_util import QueryBox, TextEditor, format_query, use_busy, use_be_busy, BusyOverlay, BusyExempt, GraphViz
+from karibdis.ui.ui_util import QueryBox, TextEditor, format_query, use_busy, BusyScope, BusyExempt, GraphViz
 from karibdis.util.async_import import async_import
-from karibdis.ui import toast
+from karibdis.ui.toast import toast
 pm4py = async_import("pm4py")
 
 from karibdis.utils import *
@@ -50,12 +50,18 @@ def KnowledgeModelingUI(pkg):
 
 @reacton.component
 def ActiveImportUI(source, set_source, pkg):
+    with w.VBox() as main:
+        BusyScope(lambda: ActiveImportBody(source, set_source, pkg))
+    return main
+
+@reacton.component
+def ActiveImportBody(source, set_source, pkg):
     stage, set_stage = reacton.use_state(EXTRACT)
     importer, set_importer = reacton.use_state(None)
     count, set_count = reacton.use_state(0)
-    is_processing, be_busy_with = use_busy()
     title, set_title = reacton.use_state('')
     subtitle, set_subtitle = reacton.use_state('')
+    _, be_busy_with = use_busy()
 
     def terminate():
         set_count(0)
@@ -64,16 +70,17 @@ def ActiveImportUI(source, set_source, pkg):
         set_source(None)
 
     def complete():
-        def _on_load_done(_):
+        def _load():
+            importer.load()
             toast('Data successfully loaded into the knowledge graph.', kind='success')
             terminate()
-        be_busy_with(importer.load, on_done=_on_load_done)
+        be_busy_with(_load)
 
     def cancel():
         print('Canceled')
         terminate()
 
-    def render_view():
+    with w.VBox() as main:
         w.Label(value=f"Import from {source}. Currently importing {count} tuples. Importer: {importer}. Stage: {stage}.")
 
         with v.Card(layout = ipywidgets.Layout(width='100%', height='100%')):
@@ -86,10 +93,11 @@ def ActiveImportUI(source, set_source, pkg):
                 with v.CardText():
 
                     def run_extraction(extraction_routine):
-                        def _on_extract_done(_):
+                        def _extract():
+                            extraction_routine()
                             set_count(len(importer.addition_graph))
                             set_stage(ALIGN)
-                        be_busy_with(extraction_routine, on_done=_on_extract_done)
+                        be_busy_with(_extract)
 
                     if importer is None:
                         if source == TEXT:
@@ -124,19 +132,16 @@ def ActiveImportUI(source, set_source, pkg):
 
         BusyExempt(lambda: w.Button(description="Cancel Knowledge Import", on_click=cancel,
                                     layout=w.Layout(flex='0 0 auto')))
-
-    with w.VBox() as main:
-        BusyOverlay(is_processing, render_view, be_busy_with=be_busy_with)
     return main
 
 @reacton.component
 def TextExtractionUI(importer, set_subtitle, run_extraction):
-    _, be_busy_with = use_be_busy()
+    _, be_busy_with = use_busy()
     text, set_text = reacton.use_state('')#'The process value CRP represents the mg of C-reactive protein per liter of blood in a blood test')
     rulesloading, set_rulesloading = reacton.use_state(False)
 
     def import_rules():
-        be_busy_with(lambda: importer.import_rules_from_statement(text), on_done=lambda _: set_rulesloading(True))
+        be_busy_with(lambda: [importer.import_rules_from_statement(text), set_rulesloading(True)])
 
     w.Textarea(value=text, on_value=set_text, rows=10, layout = ipywidgets.Layout(width='98%'))
     with w.HBox():
@@ -164,7 +169,7 @@ def TextExtractionUI(importer, set_subtitle, run_extraction):
 
 @reacton.component
 def EventLogExtractionUI(importer, set_subtitle, run_extraction):
-    _, be_busy_with = use_be_busy()
+    _, be_busy_with = use_busy()
     log, set_log = reacton.use_state(None)
     done_with_columns, set_done_with_columns = reacton.use_state(False)
     if log is None:
@@ -191,7 +196,7 @@ def EventLogExtractionUI(importer, set_subtitle, run_extraction):
         dirty, set_dirty = reacton.use_state(False)
 
         def complete_column_import():
-            be_busy_with(lambda: importer.import_event_log_entities(log), on_done=lambda _: set_done_with_columns(True))
+            be_busy_with(lambda: [importer.import_event_log_entities(log), set_done_with_columns(True)])
         
         def change_col_type(column, value):
             if value == 'ENTITY':
@@ -301,7 +306,7 @@ def DiscoveryUI(importer, log, run_extraction):
             for relations, data in x.items():
                 with v.ListItem() as main:
                     v.Checkbox(v_model=data, on_v_model=lambda value, relation=relation, relations=relations: (set_declare({**declare, relation : {**declare.get(relation, dict()), relations: value}})))
-                    v.Label(children= f'{relations}', disabled=not data)
+                    v.Label(children= f'{relations}', class_='' if data else 'text-disabled')
                 #w.Label(value=f'\t{relations} : {data}')
         with w.HBox():
             w.Button(description="Load Constraints", on_click=lambda: run_extraction(lambda: importer.import_declare(declare))) 
@@ -354,7 +359,7 @@ def ExistingOntologyExtractionUI(importer, set_subtitle, run_extraction):
 # =========================== SHARED UI ===========================
 @reacton.component
 def QueryView(graph, initial_query=None, callback_accept=None):
-    _, be_busy_with = use_be_busy()
+    _, be_busy_with = use_busy()
 
 
     with w.VBox(layout = ipywidgets.Layout(width='100%', height='98%')) as main:  
@@ -375,7 +380,7 @@ def QueryView(graph, initial_query=None, callback_accept=None):
                 button_accept = w.Button(description='Load Data', on_click=accept)
 
             else:
-                button_edit = w.Button(description='Test Query', on_click=lambda: be_busy_with(run_query))
+                w.Button(description='Test Query', on_click=lambda: be_busy_with(run_query))
 
         # TODO one initial edit
 
@@ -383,7 +388,7 @@ def QueryView(graph, initial_query=None, callback_accept=None):
 
 @reacton.component
 def AlignmentUI(importer, set_stage):
-    _, be_busy_with = use_be_busy()
+    _, be_busy_with = use_busy()
     alignment, set_alignment = reacton.use_state([])
 
     def apply_alignment(accepted_alignment):
@@ -391,7 +396,7 @@ def AlignmentUI(importer, set_stage):
         set_stage(VALIDATE)
     with w.VBox() as main:
         AlignmentView(importer, alignment, apply_alignment)
-        w.Button(description="Automated Alignment", on_click=lambda: be_busy_with(importer.determine_alignment, on_done=set_alignment))
+        w.Button(description="Automated Alignment", on_click=lambda: be_busy_with(lambda: set_alignment(importer.determine_alignment())))
     return main
 
 @reacton.component

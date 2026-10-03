@@ -7,7 +7,7 @@ import reacton.ipywidgets as w
 import reacton.ipyvuetify as v
 
 from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
-from karibdis.ui.ui_util import SelectionMenu, use_be_busy
+from karibdis.ui.ui_util import SelectionMenu, use_busy
 from karibdis.utils import *
 from rdflib import Literal, RDFS, XSD
 from rdflib.paths import ZeroOrMore
@@ -33,7 +33,6 @@ def TaskExecutionUI(engine):
         SelectionMenu(
             "Task Execution",
             tasks,
-            set_tasks,
             reload,
             task_label ,
             make_task_view,
@@ -54,7 +53,7 @@ def TaskBody(engine, current_task_case, reload):
 
     current_case_ref = reacton.use_ref(None)
     current_case_ref.current = current_case
-    _, be_busy_with = use_be_busy()
+    _, be_busy_with = use_busy()
     be_busy_with_ref = reacton.use_ref(be_busy_with)
     be_busy_with_ref.current = be_busy_with
     pv_values, set_pv_values = reacton.use_state({})
@@ -94,7 +93,8 @@ def TaskBody(engine, current_task_case, reload):
                         if val is not None and val != EMPTY_ENTITY:
                             pkg.add((current_case_ref.current, pv, val if meta.is_entity else Literal(val, datatype=meta.attr_type)))
                 engine.complete_task(current_task_ref.current)
-            be_busy_with_ref.current(_do_submit, on_done=lambda _: reload())
+                reload()
+            be_busy_with_ref.current(_do_submit)
         
         def on_widget_change(pv, idx):
             def handler(new_value):
@@ -138,14 +138,15 @@ def TaskBody(engine, current_task_case, reload):
 
     _GRID_COLS = '2fr 3fr 1fr auto'  # Attribute | Value | Type | Actions
     _DATA_PAD  = '0.5em 0.75em 0.5em 0.75em'
-    _HDR_PAD   = '0.5em 0.75em 0.8em 0.75em'  # Extra bottom padding for descenders
+    _HDR_PAD   = '0.5em 0.75em'
     _HDR_BG    = '#f5f5f5'
-    _HDR_SEP   = '2px solid #dddddd'  # header-to-data separator
+    _HDR_SEP   = '1px solid #dddddd'  # header-to-data separator
     _COL_SEP   = '1px solid #e0e0e0'  # column dividers in header only
     _ROW_SEP   = '1px solid #f0f0f0'  # very subtle row separator for data
 
     def _hdr(last=False):
         return w.Layout(padding=_HDR_PAD, background_color=_HDR_BG, font_weight='bold',
+                        height='auto', display='flex', align_items='center',
                         border_bottom=_HDR_SEP,
                         border_right=(None if last else _COL_SEP))
 
@@ -160,10 +161,10 @@ def TaskBody(engine, current_task_case, reload):
             grid_template_columns=_GRID_COLS, flex_flow='row dense',
         )):
             # Header row — same grid tracks as data, so columns align perfectly
-            # w.Label(value='Attribute', layout=_hdr())
-            # w.Label(value='Value',     layout=_hdr())
-            # w.Label(value='Type',      layout=_hdr())
-            # w.Label(value='Actions',   layout=_hdr(last=True))
+            w.Label(value='Attribute', layout=_hdr())
+            w.Label(value='Value',     layout=_hdr())
+            w.Label(value='Type',      layout=_hdr())
+            w.Label(value='Actions',   layout=_hdr(last=True))
 
             for pv, vals in pv_values.items():
                 meta = get_attr(pkg, pv)
@@ -294,7 +295,7 @@ def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofoc
                 pass
         return v.TextField(
             v_model=str(default_value), type="number", placeholder=placeholder,
-            autofocus=autofocus, on_v_model=int_handler, dense=True, style_=style, full_width=True,
+            autofocus=autofocus, on_v_model=int_handler, density='compact', style_=style,
         )
     if attr_type == XSD.float:
         _debounce_timer = [None]
@@ -313,8 +314,9 @@ def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofoc
             _debounce_timer[0] = threading.Timer(0.8, fire)
             _debounce_timer[0].start()
         return v.TextField(
-            v_model=str(default_value), type="number", step="any", placeholder=placeholder,
-            autofocus=autofocus, on_v_model=on_change, dense=True, style_=style, full_width=True,
+            v_model=str(default_value), type="number", attributes={'step': 'any'},
+            placeholder=placeholder, autofocus=autofocus, on_v_model=on_change,
+            density='compact', style_=style,
         )
     if attr_type == XSD.boolean:
         return w.Checkbox(value=default_value, description=placeholder,
@@ -322,7 +324,7 @@ def make_scalar_widget(attr_type, default_value, placeholder, on_change, autofoc
     # XSD.string and fallback
     return v.TextField(
         v_model=default_value or "", placeholder=placeholder,
-        autofocus=autofocus, on_v_model=on_change, dense=True, style_=style,
+        autofocus=autofocus, on_v_model=on_change, density='compact', style_=style,
     )
 
 
