@@ -209,10 +209,11 @@ def test_task_execution_locks_other_tasks_during_submit(
     solara_test, page_session: Page, monkeypatch
 ):
     engine = _engine_with_open_tasks(n_cases=2)
-    _slow_down(monkeypatch, KGProcessEngine, 'complete_task', 4.0)
+    _slow_down(monkeypatch, KGProcessEngine, 'complete_task', 8.0)
 
     display(TaskExecutionUI(engine))
     page_session.get_by_role('button', name='Submit').click()
+    expect(spinners(page_session)).to_have_count(1)
 
     # The lock blocks via pointer-events, not disabled=, so assert the click cannot land.
     with pytest.raises(PWTimeout):
@@ -225,16 +226,15 @@ def test_cancel_stays_clickable_while_the_import_view_is_blocked(
     solara_test, page_session: Page, monkeypatch
 ):
     system = KnowledgeGraphBPMS()
-    # The view builds a ChatOpenAI client just to construct the importer, which needs an
-    # API key that CI has no business holding. Nothing here ever calls the model.
     monkeypatch.setattr('karibdis.KnowledgeImporter.langchain_openai',
                         SimpleNamespace(ChatOpenAI=lambda **kwargs: None))
     monkeypatch.setattr(TextualImporter, 'import_content_from_statement',
-                        lambda self, text: time.sleep(4.0))
+                        lambda self, text: time.sleep(8.0))
 
     display(KnowledgeModelingUI(system.pkg))
     page_session.get_by_role('button', name='Text').click()
     page_session.get_by_role('button', name='Load Entities').click()
+    expect(spinners(page_session)).to_have_count(1)
 
     with pytest.raises(PWTimeout):
         page_session.get_by_role('button', name='Load Rules').click(timeout=1200)
