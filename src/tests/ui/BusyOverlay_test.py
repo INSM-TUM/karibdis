@@ -1,13 +1,7 @@
-"""Tests for the busy overlay in ui_util.
-
-The first group exercises the components by themselves, with a gate standing in for slow
-work, so the contract is readable without any process engine setup. The second group
-checks that the four application views wire that contract up correctly.
-"""
-
 import string
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 import reacton
@@ -36,9 +30,6 @@ EXEMPT_BUTTON = 'Always clickable'
 
 def spinners(page: Page):
     return page.locator('.v-progress-circular:visible')
-
-
-# =========================== COMPONENT TESTS ===========================
 
 @reacton.component
 def WorkerBody(work, with_exempt=False):
@@ -132,8 +123,6 @@ def test_work_runs_inline_when_no_scope_encloses_the_component(solara_test, page
     assert done.wait(5.0), 'work should still run without an enclosing BusyScope'
     expect(spinners(page_session)).to_have_count(0)
 
-
-# =========================== INTEGRATION TESTS ===========================
 
 def _slow_down(monkeypatch, cls, method, seconds, when=lambda self: True):
     """Patches the class rather than an instance: open_decisions() rebuilds its Decision
@@ -236,6 +225,10 @@ def test_cancel_stays_clickable_while_the_import_view_is_blocked(
     solara_test, page_session: Page, monkeypatch
 ):
     system = KnowledgeGraphBPMS()
+    # The view builds a ChatOpenAI client just to construct the importer, which needs an
+    # API key that CI has no business holding. Nothing here ever calls the model.
+    monkeypatch.setattr('karibdis.KnowledgeImporter.langchain_openai',
+                        SimpleNamespace(ChatOpenAI=lambda **kwargs: None))
     monkeypatch.setattr(TextualImporter, 'import_content_from_statement',
                         lambda self, text: time.sleep(4.0))
 
