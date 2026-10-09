@@ -1,0 +1,6 @@
+case:concept:name,concept:name,org:resource,time:timestamp,lifecycle:transition,phoneType,cost,defectFixed
+1,Register,System,2024-01-01T10:00:00.000+00:00,complete,T1,,
+1,Repair,Tester1,2024-01-01T11:00:00.000+00:00,complete,,12.5,
+1,Inform User,System,2024-01-01T12:00:00.000+00:00,complete,,,True
+2,Register,System,2024-01-02T10:00:00.000+00:00,complete,T2,,
+2,Inform User,Tester2,2024-01-02T11:00:00.000+00:00,complete,,,False
