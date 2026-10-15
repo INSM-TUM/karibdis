@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<log xes.version="1.0" xmlns="http://www.xes-standard.org/">
+    <extension name="Lifecycle" prefix="lifecycle" uri="http://www.xes-standard.org/lifecycle.xesext"/>
+    <extension name="Organizational" prefix="org" uri="http://www.xes-standard.org/org.xesext"/>
+    <extension name="Time" prefix="time" uri="http://www.xes-standard.org/time.xesext"/>
+    <extension name="Concept" prefix="concept" uri="http://www.xes-standard.org/concept.xesext"/>
+    <trace>
+        <string key="concept:name" value="1"/>
+        <event>
+            <string key="concept:name" value="Register"/>
+            <string key="org:resource" value="System"/>
+            <date key="time:timestamp" value="2024-01-01T10:00:00.000+00:00"/>
+            <string key="lifecycle:transition" value="complete"/>
+            <string key="phoneType" value="T1"/>
+        </event>
+        <event>
+            <string key="concept:name" value="Repair"/>
+            <string key="org:resource" value="Tester1"/>
+            <date key="time:timestamp" value="2024-01-01T11:00:00.000+00:00"/>
+            <string key="lifecycle:transition" value="complete"/>
+            <float key="cost" value="12.5"/>
+        </event>
+        <event>
+            <string key="concept:name" value="Inform User"/>
+            <string key="org:resource" value="System"/>
+            <date key="time:timestamp" value="2024-01-01T12:00:00.000+00:00"/>
+            <string key="lifecycle:transition" value="complete"/>
+            <boolean key="defectFixed" value="true"/>
+        </event>
+    </trace>
+    <trace>
+        <string key="concept:name" value="2"/>
+        <event>
+            <string key="concept:name" value="Register"/>
+            <string key="org:resource" value="System"/>
+            <date key="time:timestamp" value="2024-01-02T10:00:00.000+00:00"/>
+            <string key="lifecycle:transition" value="complete"/>
+            <string key="phoneType" value="T2"/>
+        </event>
+        <event>
+            <string key="concept:name" value="Inform User"/>
+            <string key="org:resource" value="Tester2"/>
+            <date key="time:timestamp" value="2024-01-02T11:00:00.000+00:00"/>
+            <string key="lifecycle:transition" value="complete"/>
+            <boolean key="defectFixed" value="false"/>
+        </event>
+    </trace>
+</log>
