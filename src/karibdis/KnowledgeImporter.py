@@ -3,6 +3,7 @@ from enum import Enum, auto
 import numbers
 
 from rdflib import Graph, Literal, RDF, RDFS, OWL, XSD, SH, URIRef, Namespace
+from rdflib.term import _is_valid_uri
 from urllib.parse import quote, unquote
 from karibdis.utils import *
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
@@ -63,7 +64,7 @@ class Keys(enum.Enum):
     # RESOURCE = BPO.Resource, BPO.performedBy
     # ROLE = BPO.Role, BPO.hasRole
 
-    ID = None, 'id'
+    TASK_ID = None, 'id'
     TIMESTAMP = None, None
     LIFECYCLE = None, None
     # DIRECTLY_FOLLOWED_BY = None, BPO.directlyFollowedBy
@@ -71,6 +72,7 @@ class Keys(enum.Enum):
 
 default_attribute_aliases = {
     'concept:name' : BPO.Activity,
+    'concept:instance' : Keys.TASK_ID,
     'case:concept:name' : BPO.Case,
     'org:resource' : BPO.Resource,
     'time:timestamp' : Keys.TIMESTAMP,
@@ -246,7 +248,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.attribute_aliases = {** default_attribute_aliases, ** attribute_aliases}
         self.recalculate_reverse_aliases()
 
-        self.ignore_columns = set(ignore_columns).union(set([BPO.Case, Keys.ID, Keys.LIFECYCLE, Keys.TIMESTAMP])) # These are handled differently
+        self.ignore_columns = set(ignore_columns).union(set([BPO.Case, Keys.TASK_ID, Keys.LIFECYCLE, Keys.TIMESTAMP])) # These are handled differently
         self.entity_columns = set(entity_columns).union(set([BPO.Case, BPO.Activity]))
         self.value_columns = set(value_columns)
 
@@ -269,7 +271,16 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.reverse_attribute_aliases = dict((v, k) for k, v in self.attribute_aliases.items())
 
     def entity_instance_node(self, col : str | URIRef, entity):
-        return self.namespace[f'{quote(uri_to_id(col))}_{quote(entity)}']
+        f_lower = entity.lower()
+        if (
+            f_lower.startswith("http:")
+            or f_lower.startswith("https:")
+            or f_lower.startswith("urn:")
+            or f_lower.startswith("file:")
+        ) and _is_valid_uri(entity):
+            return URIRef(entity)
+        else:
+            return self.namespace[f'{quote(uri_to_id(col))}_{quote(entity)}']
     
     def activity_node(self, activity): #TODO this ignores merged nodes, assuming all relevant activities came from this log/importer
         return self.entity_instance_node(BPO.Activity, activity)
@@ -379,7 +390,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
             return Literal(col.value_counts(dropna=True).index[0]).datatype # Get most common value inferred datatype
 
 
-# Imports events as they occur
+# Imports events as they occur, primarily for testing and evaluation; might be used to replay external occurences
 class OnlineEventImporter(SimpleEventLogImporter):
 
     def __init__(
@@ -446,7 +457,7 @@ class OnlineEventImporter(SimpleEventLogImporter):
         self.set_node_attribute(task_node, BPO.Case, current_case)
         if current_tail:
             # Connect to to preceding node
-            self.add((current_tail, BPO.directlyFollowedBy, task_node))
+            self.add((current_tail, BPO.directlyFollowedBy, task_node)) # TODO directly follows has no clear semantic once lifecycle comes into play
 
         attributes = self.get_entity_attr_list(event)
 
@@ -465,24 +476,27 @@ class OnlineEventImporter(SimpleEventLogImporter):
 
         # Add event attributes to either task or case
         for attr in attributes:
-            value = self.get_entity_attr(event, attr)
-            target = task_node if (attr not in self.case_attributes) else case_node
+            if (attr not in self.ignore_columns):
+                value = self.get_entity_attr(event, attr)
+                target = task_node if (attr not in self.case_attributes) else case_node
+                if self.is_collection(value): 
+                    single_values = value
+                else:
+                    single_values = [value]
+                for single_value in single_values:
+                    if notna(single_value): 
+                        self.set_node_attribute(target, attr, single_value)
 
-            if notna(value) and (attr not in self.ignore_columns): 
-                self.set_node_attribute(target, attr, value)
-
-                
+            
+    def is_collection(self, obj):
+        return hasattr(obj, "__iter__") and not isinstance(obj, str)
 
     def case_tail(self, case_node):
-        def case_tail_in(graph, case_node):
+        def case_tail_in(graph):
             case_tasks = set(graph.objects(subject=case_node, predicate=~BPO.partOf))
             followed_case_tasks = set(graph.objects(subject=case_node, predicate=~BPO.partOf / ~BPO.directlyFollowedBy))
             return next(iter(case_tasks - followed_case_tasks), None)
-        loading_tail = case_tail_in(self.addition_graph, case_node)
-        if not loading_tail:
-            return case_tail_in(self.pkg, case_node)
-        else:
-            return loading_tail
+        return case_tail_in(self.addition_graph) or case_tail_in(self.pkg)
 
     
         # Can be overriden, currently assumes entities as dicts
@@ -519,7 +533,7 @@ class OnlineEventImporter(SimpleEventLogImporter):
             is_value_column = True
         elif isinstance(col_data, numbers.Number) or isinstance(col_data, datetime.date):
             is_value_column = True
-        elif col_data in set([True, False]):
+        elif col_data in (True, False):
             is_value_column = True
         else:
             is_entity_column = True
@@ -527,11 +541,11 @@ class OnlineEventImporter(SimpleEventLogImporter):
         return is_entity_column, is_value_column
     
     def attribute_relation(self, attr):
-        return self.attribute_relations.get(attr, self.entity_instance_node(BPO.ProcessValue, attr))
+        return self.attribute_relations.get(attr) or self.entity_instance_node(BPO.ProcessValue, attr)
     
     def task_id_for_event(self, event, case_id, case_node):
         try:
-            return self.get_entity_attr(event, Keys.ID)
+            return self.get_entity_attr(event, Keys.TASK_ID)
         except:  # TODO: A bit hacky
             num_current_tasks = len(set(self.addition_graph.objects(subject=case_node, predicate=~BPO.partOf)) | set(self.pkg.objects(subject=case_node, predicate=~BPO.partOf)))
             return f'{case_id}_{num_current_tasks + 1}' # TODO: This doesn't allow to have mulitple events for the same task!
