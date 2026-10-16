@@ -10,14 +10,16 @@ from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
 import karibdis.ProcessKnowledgeGraph as ProcessKnowledgeGraph
 from pandas import notna
 import pandas as pd
-from pandas.api.types import is_string_dtype, is_numeric_dtype, is_datetime64_any_dtype
+from pandas.api.types import is_numeric_dtype, is_datetime64_any_dtype
 import datetime
-import csv
 import re
 
 import textwrap
 import json 
 import uuid
+
+import pandas as pd
+import numpy as np
 
 
 from karibdis.util.async_import import async_import
@@ -27,7 +29,6 @@ pm4py = async_import("pm4py")
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 
-from itertools import zip_longest
 
 import logging
 
@@ -73,6 +74,7 @@ class Keys(enum.Enum):
     # DIRECTLY_FOLLOWED_BY = None, BPO.directlyFollowedBy
     # CAN_BE_EXECUTED_BY = None, BPO.canBeExecutedBy
 
+
 default_attribute_aliases = {
     'concept:name' : BPO.Activity,
     'concept:instance' : Keys.TASK_ID,
@@ -103,22 +105,10 @@ default_lifecycle_relations = {
 
 
 ### ===== Event Log Files =====
-
-# Known names of the key columns of csv event logs, normalized via _normalize_column_name, in order of preference
-csv_column_candidates = {
-    'case:concept:name' : ['case:concept:name', 'caseid', 'case', 'caseidentifier', 'traceid', 'trace'],
-    'concept:name' : ['concept:name', 'activity', 'activityname', 'eventname', 'event', 'task', 'taskname'],
-    'time:timestamp' : ['time:timestamp', 'timestamp', 'completetimestamp', 'endtimestamp', 'completetime', 'endtime', 'time'],
-    'org:resource' : ['org:resource', 'resource', 'user'],
-}
-
-supported_event_log_formats = {
-    '.xes' : 'xes',
-    '.csv' : 'csv',
-}
+supported_event_log_formats = ['.xes', '.csv']
 
 def event_log_format(filename) -> str:
-    for extension, file_format in supported_event_log_formats.items():
+    for extension, file_format in supported_event_log_formats:
         if str(filename).lower().endswith(extension):
             return file_format
     raise ValueError(f'Unsupported event log file "{filename}", expected one of {", ".join(supported_event_log_formats)}')
@@ -130,96 +120,32 @@ def read_event_log(path, file_format=None, **csv_args) -> pd.DataFrame:
     if file_format == 'xes':
         return pm4py.read_xes(str(path))
     elif file_format == 'csv':
-        return read_csv_event_log(path, **csv_args)
+        df = pd.read_csv(str(path), sep=None, engine="python") # sep=None + engine="python" uses pandas built-in separator sniffing
+        return convert_df_datetime_columns(df) # Pandas doesn't discover those automatically
     else:
         raise ValueError(f'Unsupported event log format "{file_format}"')
 
-def read_csv_event_log(
-        path,
-        case_column=None,
-        activity_column=None,
-        timestamp_column=None,
-        resource_column=None,
-        timestamp_format=None,
-        sep=None,
-        **read_csv_args) -> pd.DataFrame:
-    """Reads a csv event log and renames its key columns to the XES standard names (case:concept:name, concept:name, time:timestamp, org:resource).
-    Key columns that are not given explicitly are detected by common names, e.g., "Case ID", "Activity", "Timestamp", "Resource".
-    Columns with "timestamp" in their name are parsed as (UTC) datetimes. Text is taken literally, only empty cells are missing values.
-    The separator is sniffed if not given."""
-    if sep is None:
-        sep = _sniff_csv_separator(path, encoding=read_csv_args.get('encoding'))
-    log = pd.read_csv(path, sep=sep, **read_csv_args)
-
-    key_columns = {
-        'case:concept:name' : case_column,
-        'concept:name' : activity_column,
-        'time:timestamp' : timestamp_column,
-        'org:resource' : resource_column,
-    }
-    renames = dict()
-    for standard_key, col in key_columns.items():
-        if col is None:
-            col = _detect_csv_column(log.columns, standard_key, exclude=renames.keys())
-        elif col not in log.columns:
-            raise ValueError(f'Column "{col}" given for {standard_key} does not exist in event log')
-        elif col in renames:
-            raise ValueError(f'Column "{col}" cannot be used for both {renames[col]} and {standard_key}')
-        if col is not None and col != standard_key:
-            if standard_key in log.columns:
-                raise ValueError(f'Cannot use column "{col}" as {standard_key}, as the event log already has a column of that name')
-            renames[col] = standard_key
-
-    # As in XES logs, identifiers are always strings and text is taken literally, i.e., only empty cells are missing.
-    # pandas would otherwise parse, e.g., "NA" or "null" as missing (the sepsis log has a case and a diagnosis "NA") and an id "7" as 7.0
-    identifier_keys = ['case:concept:name', 'concept:name', 'org:resource']
-    text_columns = [col for col in log.columns if renames.get(col, col) in identifier_keys or pd.api.types.infer_dtype(log[col], skipna=True) == 'string']
-    if len(text_columns) > 0:
-        texts = pd.read_csv(path, sep=sep, **{**read_csv_args, 'usecols' : text_columns, 'dtype' : str, 'keep_default_na' : False, 'na_values' : ['']})
-        for col in text_columns:
-            log[col] = texts[col]
-    log = log.rename(columns=renames)
-
-    for required_key in ['case:concept:name', 'concept:name']:
-        if required_key not in log.columns:
-            raise ValueError(f'Could not determine the {required_key} column of the event log, please specify it explicitly')
-
-
-    for col in log.columns:
-        if (col == 'time:timestamp' or 'timestamp' in _normalize_column_name(col)) and not is_datetime64_any_dtype(log[col]):
+def convert_df_datetime_columns(df):
+# Adapted from: https://towardsdatascience.com/auto-detect-and-set-the-date-datetime-datatypes-when-reading-csv-into-pandas-261746095361/
+    """Automatically detect and convert (mutate in place!) each
+    dataframe column of datatype 'object' to a datetime just
+    when ALL of its non-NaN values can be successfully parsed
+    by pd.to_datetime().  Also returns a ref. to df for
+    convenient use in an expression.
+    """
+    for c in df.columns[(df.dtypes == 'object') | (df.dtypes == 'str')]:
+        try:
+            # TODO allow setting a system timezone at some point
+            tmpdt = pd.to_datetime(df[c], format='ISO8601', utc=True) # Limit format to avoid, e.g., PhoneType "T1" being parsed as date
             try:
-                log[col] = pd.to_datetime(log[col], utc=True, format=timestamp_format)
-            except (ValueError, TypeError) as e:
-                if col == 'time:timestamp':
-                    raise ValueError(f'Could not parse timestamps of column "{col}": {e}') from e
-                logging.warning(f'Could not parse column "{col}" as timestamps, keeping it as is: {e}')
+                tmpfloat = df[c].astype(np.float64)
+            except:
+                df[c] = tmpdt
+        except: #Can't convert some elements of the column to dt...
+            pass # ...so leave whole column as-is unconverted
+    return df
 
-    # Group events by case, ordered by time, as in XES logs
-    sort_keys = ['case:concept:name'] + (['time:timestamp'] if 'time:timestamp' in log.columns else [])
-    return log.sort_values(sort_keys, kind='stable').reset_index(drop=True)
 
-def _normalize_column_name(col) -> str:
-    return re.sub(r'[\s_\-]', '', str(col)).lower()
-
-def _detect_csv_column(columns, standard_key, exclude=()):
-    normalized_columns = dict()
-    for col in columns:
-        if col not in exclude:
-            normalized_columns.setdefault(_normalize_column_name(col), col)
-    for candidate in csv_column_candidates[standard_key]:
-        if candidate in normalized_columns:
-            return normalized_columns[candidate]
-    return None
-
-def _sniff_csv_separator(path, encoding=None, default=','):
-    with open(path, newline='', encoding=encoding or 'utf-8', errors='replace') as f:
-        sample = f.read(64 * 1024)
-    if '\n' in sample:
-        sample = sample[:sample.rindex('\n')] # Avoid sniffing on a truncated line
-    try:
-        return csv.Sniffer().sniff(sample, delimiters=',;\t|').delimiter
-    except csv.Error:
-        return default
 
 
 class KnowledgeImporter(ABC):
@@ -411,6 +337,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
     # Default behavior for importing event logs
     def import_event_log_entities(self, log : pd.DataFrame):
 
+        print(self.reverse_attribute_aliases)
         activity_col = self.reverse_attribute_aliases.get(BPO.Activity) # Must exist
 
         for col in log:
@@ -451,7 +378,19 @@ class SimpleEventLogImporter(KnowledgeImporter):
                     for activity in log[log[col].notnull()][activity_col].unique(): 
                         activity_node = self.activity_node(activity) 
                         self.add((activity_node, BPO.writesValue , value_node))
-    
+
+    def discover_declare(self, log, allowed_templates, min_support_ratio, min_confidence_ratio):
+        keys = dict()
+        # TODO actually assert existence of these columns in the log
+        if self.reverse_attribute_aliases.get(BPO.Activity):
+            keys['activity_key'] = self.reverse_attribute_aliases[BPO.Activity]
+        if self.reverse_attribute_aliases.get(BPO.Case):
+            case_col_id = self.reverse_attribute_aliases[BPO.Case]
+            keys['case_id_key'] = case_col_id
+            log[case_col_id] = log[case_col_id].astype(str) # pm4py expects case ids to be strings
+        if self.reverse_attribute_aliases.get(Keys.TIMESTAMP):
+            keys['timestamp_key'] = self.reverse_attribute_aliases[Keys.TIMESTAMP]
+        return pm4py.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio, **keys)
 
     def import_declare(self, declare):
         declare_map = {

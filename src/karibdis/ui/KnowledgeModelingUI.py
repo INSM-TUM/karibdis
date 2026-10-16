@@ -10,8 +10,6 @@ import reacton.ipyvuetify as v
 
 
 from karibdis.ui.ui_util import QueryBox, TextEditor, format_query
-from karibdis.util.async_import import async_import
-pm4py = async_import("pm4py")
 
 from karibdis.utils import *
 from karibdis.KnowledgeImporter import KnowledgeImporter, TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter, default_attribute_aliases, read_event_log, event_log_format, supported_event_log_formats
@@ -265,8 +263,7 @@ def DiscoveryUI(importer, log, run_extraction):
         min_confidence_ratio, set_min_confidence_ratio = reacton.use_state(0.8)
         
         def discover():
-            # TODO take specified activity column (etc.) from importer
-            _declare = pm4py.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio)
+            _declare = importer.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio)
             set_declare(_declare)
 
         v.Slider(
