@@ -259,10 +259,17 @@ def color_by_type(rdf_graph):
     return node_colors
 
 
-def draw_graph(graph, color_func=color_by_type):
-
+def draw_graph(graph, color_func=color_by_type, edge_color_func=None):
+    #updated to apply edge coloring logic, which is defined in KnowledgeModelingUI.py
     def edge_attrs(subject, predicate, objectt):
-        return {'label' : predicate.n3(graph.namespace_manager)}
+        attributes = {
+            'label' : predicate.n3(graph.namespace_manager)
+        }
+
+        if edge_color_func is not None:
+            if edge_color_func(subject, predicate, objectt) is not None:
+                attributes["edge_color"]=edge_color_func(subject, predicate, objectt)
+        return attributes
 
     def node_label(uri):
         return uri.n3(graph.namespace_manager)
@@ -270,6 +277,7 @@ def draw_graph(graph, color_func=color_by_type):
     
     dg = rdflib_to_networkx_multidigraph(graph, edge_attrs=edge_attrs, transform_s=node_label, transform_o=node_label)
     nx.set_node_attributes(dg, values='#BBBBBB', name='color')
+    # nx.set_edge_attributes(dg, value = "#BBBBBB", name='color')
 
     for node, color in color_func(graph).items():
         dg.nodes[node_label(node)]['color'] = color
@@ -277,6 +285,17 @@ def draw_graph(graph, color_func=color_by_type):
     widget = GraphWidget(graph = dg)
     widget.edge_label_mapping = 'label'
     widget.node_color_mapping = 'color'
+
+    
+        
+    # this is for if the default color of yfiles should stay
+    if edge_color_func is not None:
+        widget.edge_styles_mapping = lambda edge: (
+            {"color": edge["properties"]["edge_color"]}
+            if "edge_color" in edge["properties"]
+            else {}
+        )
+    
     #widget.show()
     
     # Hack. Display needs to be called once for the graph to render properly - so we put it into a never shown output widget 

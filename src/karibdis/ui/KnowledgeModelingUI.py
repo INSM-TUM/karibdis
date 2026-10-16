@@ -449,4 +449,17 @@ def ValidationView(importer, callback_done, set_stage=None):
 
 
 def visualize_addition_graph(importer): # TODO Partial duplicate to GraphViz
-    return draw_graph(importer.addition_graph, color_func=lambda _: dict(zip_longest(importer.addition_graph.all_nodes() - importer.pkg.all_nodes(), [], fillvalue='#99AA00')))
+    new_nodes = ( importer.addition_graph.all_nodes() - importer.pkg.all_nodes() )
+
+    def edge_color(subject, predicate, object):
+        if (subject, predicate, object) in importer.pkg:
+            return "#BBBBBB"
+        else:
+            return None
+
+    return draw_graph(importer.addition_graph, 
+                      color_func=lambda _: {
+                          node: "#99AA00" for node in new_nodes
+                      },
+                      edge_color_func = edge_color
+                      )
