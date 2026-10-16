@@ -337,7 +337,6 @@ class SimpleEventLogImporter(KnowledgeImporter):
     # Default behavior for importing event logs
     def import_event_log_entities(self, log : pd.DataFrame):
 
-        print(self.reverse_attribute_aliases)
         activity_col = self.reverse_attribute_aliases.get(BPO.Activity) # Must exist
 
         for col in log:
