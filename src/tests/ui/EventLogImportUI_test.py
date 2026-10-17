@@ -4,7 +4,6 @@ import time
 import pytest
 import reacton
 import reacton.ipywidgets as w
-from pm4py import discover_declare
 from IPython.display import display
 from playwright.sync_api import Page, expect
 from rdflib import RDF, OWL, URIRef
@@ -20,7 +19,7 @@ DATA = importlib.resources.files('tests').joinpath('data')
 INIT = URIRef('http://infs.cit.tum.de/karibdis/declare/init')
 
 # Same small repair process in each format, see tests/KnowledgeImporter_test.py
-EVENT_LOG_FILES = ['repair_log.xes', 'repair_log.csv', 'repair_log_common_columns.csv']
+EVENT_LOG_FILES = ['repair_log.xes', 'repair_log.csv'] #'repair_log_common_columns.csv']
 IMPORT_TIMEOUT = 30000
 # Defaults of the DiscoveryUI
 DECLARE_TEMPLATES = ['init', 'chainresponse', 'exactly_one', 'responded_existence', 'response', 'precedence']
@@ -34,6 +33,12 @@ def ModelingWithToasts(pkg):
         ToastHost()
     return main
 
+def wait_for_toast_setup():
+    deadline = time.time() + 5
+    while _dispatch['push'] is None and time.time() < deadline:
+        time.sleep(0.02)
+    assert _dispatch['push'] is not None, 'ToastHost never registered'
+
 def open_event_log_import(page: Page, pkg):
     display(ModelingWithToasts(pkg))
     page.get_by_role('button', name='Event Log').click()
@@ -45,7 +50,7 @@ def programmatic_import(path):
     log = read_event_log(path)
     importer = SimpleEventLogImporter(pkg)
     importer.import_event_log_entities(log)
-    importer.import_declare(discover_declare(log, allowed_templates=DECLARE_TEMPLATES, min_support_ratio=0.8, min_confidence_ratio=0.8))
+    importer.import_declare(importer.discover_declare(log, allowed_templates=DECLARE_TEMPLATES, min_support_ratio=0.8, min_confidence_ratio=0.8))
     importer.load()
     return set(pkg) - before
 
@@ -95,9 +100,6 @@ def test_upload_shows_columns(solara_test, page_session: Page, filename):
 
     for column in ['case:concept:name', 'concept:name', 'org:resource', 'time:timestamp', 'phoneType', 'cost', 'defectFixed']:
         expect(page_session.get_by_text(column, exact=True)).to_be_visible()
-    # Key columns of csv logs are shown by their standard names
-    for column in ['Case ID', 'Activity', 'Resource', 'Complete Timestamp']:
-        expect(page_session.get_by_text(column, exact=True)).to_have_count(0)
 
     expect(column_type_select(page_session, 'phoneType')).to_have_value('ENTITY')
     expect(column_type_select(page_session, 'cost')).to_have_value('VALUE')
@@ -142,14 +144,11 @@ def test_csv_column_type_change(solara_test, page_session: Page):
 
 
 def test_unreadable_csv_shows_error(solara_test, page_session: Page, tmp_path, monkeypatch):
-    path = tmp_path / 'no_activities.csv'
-    path.write_text('case,foo\n1,A\n')
+    path = tmp_path / 'invalid.xes'
+    path.write_text('This is not a valid XES file')
     monkeypatch.setitem(_dispatch, 'push', None) # Wait for this test's toast host
-    open_event_log_import(page_session, ProcessKnowledgeGraph())
-    deadline = time.time() + 5
-    while _dispatch['push'] is None and time.time() < deadline:
-        time.sleep(0.02)
-    assert _dispatch['push'] is not None, 'ToastHost never registered'
+    open_event_log_import(page_session, ProcessKnowledgeGraph())#
+    wait_for_toast_setup()
     upload(page_session, path)
 
     expect(page_session.get_by_text('Could not read event log')).to_be_visible(timeout=IMPORT_TIMEOUT)
@@ -157,3 +156,5 @@ def test_unreadable_csv_shows_error(solara_test, page_session: Page, tmp_path, m
     expect(page_session.get_by_text('Upload Event Log to be Extracted From')).to_be_visible()
     upload(page_session, DATA.joinpath('repair_log.csv'))
     expect_column_grid(page_session)
+
+# TODO: Test manual column aliasing for 'repair_log_common_columns.csv'

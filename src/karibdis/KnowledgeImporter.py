@@ -108,27 +108,25 @@ default_lifecycle_relations = {
 supported_event_log_formats = ['.xes', '.csv']
 
 def event_log_format(filename) -> str:
-    for extension, file_format in supported_event_log_formats:
-        if str(filename).lower().endswith(extension):
-            return file_format
-    raise ValueError(f'Unsupported event log file "{filename}", expected one of {", ".join(supported_event_log_formats)}')
+    try:
+        return next(filter(str(filename).lower().endswith, supported_event_log_formats))
+    except StopIteration:
+        raise ValueError(f'Unsupported event log file "{filename}", expected one of {", ".join(supported_event_log_formats)}')
 
-def read_event_log(path, file_format=None, **csv_args) -> pd.DataFrame:
-    """Reads an event log file into a dataframe with XES standard column names, as expected by pm4py and SimpleEventLogImporter.
-    The file format is derived from the file extension if not given explicitly. csv_args are passed on to read_csv_event_log."""
+def read_event_log(path, file_format=None) -> pd.DataFrame:
     file_format = file_format or event_log_format(path)
-    if file_format == 'xes':
+    if file_format == '.xes':
         return pm4py.read_xes(str(path))
-    elif file_format == 'csv':
+    elif file_format == '.csv':
         df = pd.read_csv(str(path), sep=None, engine="python") # sep=None + engine="python" uses pandas built-in separator sniffing
-        return convert_df_datetime_columns(df) # Pandas doesn't discover those automatically
+        return convert_df_datetime_columns(df) # Pandas doesn't discover ISO8601 columns automatically
     else:
         raise ValueError(f'Unsupported event log format "{file_format}"')
 
 def convert_df_datetime_columns(df):
 # Adapted from: https://towardsdatascience.com/auto-detect-and-set-the-date-datetime-datatypes-when-reading-csv-into-pandas-261746095361/
     """Automatically detect and convert (mutate in place!) each
-    dataframe column of datatype 'object' to a datetime just
+    dataframe column of datatype 'object' or 'str' to a datetime just
     when ALL of its non-NaN values can be successfully parsed
     by pd.to_datetime().  Also returns a ref. to df for
     convenient use in an expression.

@@ -10,6 +10,8 @@ import reacton.ipyvuetify as v
 
 
 from karibdis.ui.ui_util import QueryBox, TextEditor, format_query
+from karibdis.ui.toast import toast
+
 
 from karibdis.utils import *
 from karibdis.KnowledgeImporter import KnowledgeImporter, TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter, default_attribute_aliases, read_event_log, event_log_format, supported_event_log_formats
@@ -175,7 +177,7 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
                 f.write(file.content)
             try:
                 _log = read_event_log(filename, file_format=event_log_format(file.name))
-            except ValueError as e:
+            except Exception as e:
                 toast(f'Could not read event log: {e}', kind='error')
                 return
             finally:
