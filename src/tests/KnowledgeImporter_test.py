@@ -95,7 +95,7 @@ class TestReadXesEventLog:
     def test_explicit_format_overrides_extension(self, tmp_path):
         # Uploaded files are stored without extension, so the format is passed explicitly
         path = write(tmp_path, 'upload', XES_LOG.read_text())
-        assert events(read_event_log(path, file_format='xes')) == EXPECTED_EVENTS_XES
+        assert events(read_event_log(path, file_format='.xes')) == EXPECTED_EVENTS_XES
 
 
 

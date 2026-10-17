@@ -318,6 +318,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.reverse_attribute_aliases = dict((v, k) for k, v in self.attribute_aliases.items())
 
     def entity_instance_node(self, col : str | URIRef, entity):
+        entity = str(entity)
         f_lower = entity.lower()
         if (
             f_lower.startswith("http:")
