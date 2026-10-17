@@ -10,21 +10,25 @@ from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
 import karibdis.ProcessKnowledgeGraph as ProcessKnowledgeGraph
 from pandas import notna
 import pandas as pd
-from pandas.api.types import is_string_dtype, is_numeric_dtype, is_datetime64_any_dtype
+from pandas.api.types import is_numeric_dtype, is_datetime64_any_dtype
 import datetime
+import re
 
 import textwrap
 import json 
 import uuid
 
+import pandas as pd
+import numpy as np
+
 
 from karibdis.util.async_import import async_import
 langchain_openai = async_import("langchain_openai")
+pm4py = async_import("pm4py")
 
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 
-from itertools import zip_longest
 
 import logging
 
@@ -70,6 +74,7 @@ class Keys(enum.Enum):
     # DIRECTLY_FOLLOWED_BY = None, BPO.directlyFollowedBy
     # CAN_BE_EXECUTED_BY = None, BPO.canBeExecutedBy
 
+
 default_attribute_aliases = {
     'concept:name' : BPO.Activity,
     'concept:instance' : Keys.TASK_ID,
@@ -97,6 +102,48 @@ default_lifecycle_relations = {
     'start' : EventType.START_TASK,
     'complete' : EventType.COMPLETE_TASK,
 }
+
+
+### ===== Event Log Files =====
+supported_event_log_formats = ['.xes', '.csv']
+
+def event_log_format(filename) -> str:
+    try:
+        return next(filter(str(filename).lower().endswith, supported_event_log_formats))
+    except StopIteration:
+        raise ValueError(f'Unsupported event log file "{filename}", expected one of {", ".join(supported_event_log_formats)}')
+
+def read_event_log(path, file_format=None) -> pd.DataFrame:
+    file_format = file_format or event_log_format(path)
+    if file_format == '.xes':
+        return pm4py.read_xes(str(path))
+    elif file_format == '.csv':
+        df = pd.read_csv(str(path), sep=None, engine="python") # sep=None + engine="python" uses pandas built-in separator sniffing
+        return convert_df_datetime_columns(df) # Pandas doesn't discover ISO8601 columns automatically
+    else:
+        raise ValueError(f'Unsupported event log format "{file_format}"')
+
+def convert_df_datetime_columns(df):
+# Adapted from: https://towardsdatascience.com/auto-detect-and-set-the-date-datetime-datatypes-when-reading-csv-into-pandas-261746095361/
+    """Automatically detect and convert (mutate in place!) each
+    dataframe column of datatype 'object' or 'str' to a datetime just
+    when ALL of its non-NaN values can be successfully parsed
+    by pd.to_datetime().  Also returns a ref. to df for
+    convenient use in an expression.
+    """
+    for c in df.columns[(df.dtypes == 'object') | (df.dtypes == 'str')]:
+        try:
+            # TODO allow setting a system timezone at some point
+            tmpdt = pd.to_datetime(df[c], format='ISO8601', utc=True) # Limit format to avoid, e.g., PhoneType "T1" being parsed as date
+            try:
+                tmpfloat = df[c].astype(np.float64)
+            except:
+                df[c] = tmpdt
+        except: #Can't convert some elements of the column to dt...
+            pass # ...so leave whole column as-is unconverted
+    return df
+
+
 
 
 class KnowledgeImporter(ABC):
@@ -271,6 +318,7 @@ class SimpleEventLogImporter(KnowledgeImporter):
         self.reverse_attribute_aliases = dict((v, k) for k, v in self.attribute_aliases.items())
 
     def entity_instance_node(self, col : str | URIRef, entity):
+        entity = str(entity)
         f_lower = entity.lower()
         if (
             f_lower.startswith("http:")
@@ -328,7 +376,19 @@ class SimpleEventLogImporter(KnowledgeImporter):
                     for activity in log[log[col].notnull()][activity_col].unique(): 
                         activity_node = self.activity_node(activity) 
                         self.add((activity_node, BPO.writesValue , value_node))
-    
+
+    def discover_declare(self, log, allowed_templates, min_support_ratio, min_confidence_ratio):
+        keys = dict()
+        # TODO actually assert existence of these columns in the log
+        if self.reverse_attribute_aliases.get(BPO.Activity):
+            keys['activity_key'] = self.reverse_attribute_aliases[BPO.Activity]
+        if self.reverse_attribute_aliases.get(BPO.Case):
+            case_col_id = self.reverse_attribute_aliases[BPO.Case]
+            keys['case_id_key'] = case_col_id
+            log[case_col_id] = log[case_col_id].astype(str) # pm4py expects case ids to be strings
+        if self.reverse_attribute_aliases.get(Keys.TIMESTAMP):
+            keys['timestamp_key'] = self.reverse_attribute_aliases[Keys.TIMESTAMP]
+        return pm4py.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio, **keys)
 
     def import_declare(self, declare):
         declare_map = {

@@ -10,11 +10,11 @@ import reacton.ipyvuetify as v
 
 
 from karibdis.ui.ui_util import QueryBox, TextEditor, format_query
-from karibdis.util.async_import import async_import
-pm4py = async_import("pm4py")
+from karibdis.ui.toast import toast
+
 
 from karibdis.utils import *
-from karibdis.KnowledgeImporter import KnowledgeImporter, TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter, default_attribute_aliases
+from karibdis.KnowledgeImporter import KnowledgeImporter, TextualImporter, SimpleEventLogImporter, ExistingOntologyImporter, default_attribute_aliases, read_event_log, event_log_format, supported_event_log_formats
 
 
 
@@ -175,12 +175,18 @@ def EventLogExtractionUI(importer, set_subtitle, be_busy_with, run_extraction):
             filename = os.path.join(tempfile.gettempdir(), os.urandom(24).hex())
             with open(filename, 'wb') as f:
                 f.write(file.content)
-                _log = pm4py.read_xes(f.name) # TODO also support csv at some point
+            try:
+                _log = read_event_log(filename, file_format=event_log_format(file.name))
+            except Exception as e:
+                toast(f'Could not read event log: {e}', kind='error')
+                return
+            finally:
+                os.remove(filename)
             set_log(_log)
         
         w.FileUpload(
             description = 'Upload Event Log File',
-            accept='.xes',
+            accept=','.join(supported_event_log_formats),
             on_accept=lambda **args: print(args),
             multiple=False,
             on_value=upload
@@ -259,8 +265,7 @@ def DiscoveryUI(importer, log, run_extraction):
         min_confidence_ratio, set_min_confidence_ratio = reacton.use_state(0.8)
         
         def discover():
-            # TODO take specified activity column (etc.) from importer
-            _declare = pm4py.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio)
+            _declare = importer.discover_declare(log, allowed_templates=allowed_templates, min_support_ratio=min_support_ratio, min_confidence_ratio=min_confidence_ratio)
             set_declare(_declare)
 
         v.Slider(
