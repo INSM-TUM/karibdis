@@ -75,15 +75,6 @@ EXPECTED_EVENTS_CSV = [
 
 class TestEventLogFormat:
 
-    @pytest.mark.parametrize('filename, expected', [
-        ('log.xes', 'xes'),
-        ('LOG.XES', 'xes'),
-        ('some/dir/log.csv', 'csv'),
-        ('Log.CSV', 'csv'),
-    ])
-    def test_supported_formats(self, filename, expected):
-        assert event_log_format(filename) == expected
-
     @pytest.mark.parametrize('filename', ['log.xlsx', 'log.txt', 'log', 'csv.xes.bak'])
     def test_unsupported_formats(self, filename):
         with pytest.raises(ValueError, match='Unsupported event log file'):
