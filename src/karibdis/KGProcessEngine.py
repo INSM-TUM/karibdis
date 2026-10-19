@@ -9,6 +9,35 @@ import datetime
 
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO, de_urify
 
+def never(decision): 
+    return []
+
+def unambiguous_single_choice(decision, x=0, y=float("-inf")):
+    results = decision.get_top_k_results()
+    eligible_options = []
+                    
+    for i, (score, option, verdict) in enumerate(results):
+            if score <= x: 
+                 continue
+                        
+            other_scores = [
+                other_score
+                for j, (other_score, _, _) in enumerate(results)
+                if i!= j
+                ]
+                        
+            if all(other_score <= y for other_score in other_scores):
+                eligible_options.append(option)
+    if len(eligible_options) == 1:
+        return eligible_options
+    else: return []
+    
+
+AUTOMATION_STRATEGIES = {
+    "Never": never, 
+    "UnambiguousSingleChoice": unambiguous_single_choice
+    }
+
 class KGProcessEngine:
     def __init__(self, pkg):
         self.pkg = pkg
@@ -27,8 +56,9 @@ class KGProcessEngine:
             if len(removed) > 0 or len(added) > 0:
                 self.queue_event({'knowledge_updated': True, 'removed': removed, 'added': added})
             else:
-                pass
+                self.infer_decisions()
                 # TODO self.infer_decisions()
+                
                         
 
     def queue_event(self, event):
@@ -109,26 +139,62 @@ class KGProcessEngine:
         self.queue_event({'knowledge_updated': True, 'added': effect, 'deleted': set()})
     
     def infer_decisions(self):
-        open_decisions = self.open_decisions()
-        for decision in open_decisions:
-            decision_result = self.request_decision(decision)
-            if decision_result != None:
-                return decision_result# The current decision might have changed things, so rerun the whole deduction and inference
+        if getattr(self, "automation_strategy", None) is None:
+            return []
+        
+        #iterate through open decisions and attempt automatic decision making for each one
+        for decision in self.open_decisions():
+            applied_options = self.request_decision(decision)
+            
+            #stop when a successfully automated decision is made; see inline comment in old code below
+            if applied_options:
+                return applied_options
+        
+        #no decisions were automated, or no open decisions exist
+        return []
+        
+        # open_decisions = self.open_decisions()
+        # for decision in open_decisions:
+        #     decision_result = self.request_decision(decision)
+        #     if decision_result != None:
+        #         return decision_result # The current decision might have changed things, so rerun the whole deduction and inference
     
 
     def request_decision(self, decision_to_make):
-        decision_result = self.try_automated_decision(decision_to_make)
-        if decision_result == None:
-            decision_result = self.human_decision(decision_to_make)
+        selected_options = self.try_automated_decision(decision_to_make)
+        
+        if not selected_options:
+            return []
+        
+        return self.automate_decision(decision_to_make, selected_options)
+        
+        # decision_result = self.try_automated_decision(decision_to_make)
+        # if decision_result == None:
+        #     decision_result = self.human_decision(decision_to_make)
 
-        if decision_result != None:
-            self.handle_decision(decision_to_make, decision_result)
+        # if decision_result != None:
+        #     self.handle_decision(decision_to_make, decision_result)
 
-        return decision_result
+        # return decision_result
         
     def try_automated_decision(self, decision_to_make):
         # TODO Implement logic to determine if a decision can be automated
-        return None
+        strategy = getattr(self, "automation_strategy", None)
+        if strategy is None:
+            return []
+        return strategy(decision_to_make)
+    
+    def automate_decision(self, decision_to_make, selected_options):
+        applied_options = []
+        
+        for option in selected_options:
+            option_id, effect = option
+            
+            if any(triple not in self.pkg for triple in effect):
+                self.handle_decision(decision_to_make, option)
+                applied_options.append(option)
+        
+        return applied_options
 
     # @deprecated("For development purpose only")
     def random_decision(self, decision_to_make):
@@ -184,6 +250,12 @@ class KGProcessEngine:
         open_tasks = self.pkg.query(open_tasks_query)
         for task, case in open_tasks:
             yield (task, case)
+
+    def set_automation_strategy(self, strategy):
+        if callable(strategy) or strategy is None:
+            self.automation_strategy = strategy
+        else: raise TypeError("Invalid automation strategy")
+
 
     
 class Decision:
