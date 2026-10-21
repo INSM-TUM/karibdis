@@ -450,9 +450,13 @@ def ValidationView(importer, callback_done, set_stage=None):
 
 def visualize_addition_graph(importer): # TODO Partial duplicate to GraphViz
     new_nodes = ( importer.addition_graph.all_nodes() - importer.pkg.all_nodes() )
-
+    
+    existing_edges = {
+        triple for triple in importer.addition_graph
+        if triple in importer.pkg
+    }
     def edge_color(subject, predicate, object):
-        if (subject, predicate, object) in importer.pkg:
+        if (subject, predicate, object) in existing_edges:
             return "#BBBBBB"
         else:
             return None
