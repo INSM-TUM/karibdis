@@ -6,42 +6,53 @@ from random import shuffle
 from pyshacl.consts import SH_ValidationResult, SH_resultSeverity, SH_value, SH_sourceShape, SH_resultMessage, SH_Info
 import numbers
 import datetime
+from abc import ABC, abstractmethod
 
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO, de_urify
 
-def never(decision): 
-    return []
+### ==== Abstract Strategy Class ====
+class AutomationStrategy(ABC):
+    @abstractmethod
+    def execute(self, decision):
+        pass
 
-def unambiguous_single_choice(decision, x=0, y=float("-inf")):
-    results = decision.get_top_k_results()
-    eligible_options = []
-                    
-    for i, (score, option, verdict) in enumerate(results):
-            if score <= x: 
-                 continue
-                        
-            other_scores = [
-                other_score
-                for j, (other_score, _, _) in enumerate(results)
-                if i!= j
-                ]
-                        
-            if all(other_score <= y for other_score in other_scores):
-                eligible_options.append(option)
-    if len(eligible_options) == 1:
-        return eligible_options
-    else: return []
+class NeverStrategy(AutomationStrategy):
+    def execute(self, decision):
+        return []
     
-
-AUTOMATION_STRATEGIES = {
-    "Never": never, 
-    "UnambiguousSingleChoice": unambiguous_single_choice
-    }
+class UnambiguousSingleChoiceStrategy(AutomationStrategy):
+    def __init__(self, x=0, y=float("-inf")):
+        self.x = x
+        self.y = y
+    
+    # UnambiguousSingleChoice : 
+    # With parameters x,y, select {o} iff 
+    # S(o) > x 
+    # and S(o') <= y for all o' != o. 
+    # Default x,y = (0, -∞)
+    
+    def execute(self, decision):
+        results = decision.get_top_k_results()
+        
+        above_y_count = sum(score > self.y for score, _, _ in results)
+        
+        #every option in results has at least one non-self option with score > y, thus disqualifying it 
+        if above_y_count > 1:
+            return []
+        
+        eligible_options = [
+            option for score, option, _ in results
+            if score > self.x and (above_y_count == 0 or score > self.y)
+        ]
+        
+        return eligible_options if len(eligible_options) == 1 else []
+        
 
 class KGProcessEngine:
     def __init__(self, pkg):
         self.pkg = pkg
         self.event_queue = queue.Queue()
+        self.automation_strategy = None
         self.deduce()
 
     def handle_event_root(self, event): # This needs to be called somewhere
@@ -57,7 +68,7 @@ class KGProcessEngine:
                 self.queue_event({'knowledge_updated': True, 'removed': removed, 'added': added})
             else:
                 self.infer_decisions()
-                # TODO self.infer_decisions()
+
                 
                         
 
@@ -132,21 +143,29 @@ class KGProcessEngine:
                 yield Decision(self, type.dtype, decision_instance, list(zip(option_ids, option_effects)))
 
 
-    def handle_decision(self, decision_to_make, decision_result):
+    def handle_decision(self, decision_to_make, *decision_result):
+        if not decision_result:
+            return
         print(f'Made decision {str(decision_to_make.decision_type)}, {str(decision_to_make.bindings)}--> {str(decision_result)}')
-        option_id, effect = decision_result
-        self.pkg += effect
-        self.queue_event({'knowledge_updated': True, 'added': effect, 'deleted': set()})
+        # option_id, effect = decision_result
+        effects = [
+            triple
+            for option_id, effect in decision_result
+            for triple in effect
+        ]
+        self.pkg += effects
+        self.queue_event({'knowledge_updated': True, 'added': effects, 'deleted': set()})
     
     def infer_decisions(self):
-        if getattr(self, "automation_strategy", None) is None:
+        if self.automation_strategy is None:
             return []
         
-        #iterate through open decisions and attempt automatic decision making for each one
+        #iterate through open decisions, determine which options should be selected, attempt automatic decision making for each one
         for decision in self.open_decisions():
-            applied_options = self.request_decision(decision)
+            selected_options = self.try_automated_decision(decision)
+            applied_options = self.automate_decision(decision, selected_options)
             
-            #stop when a successfully automated decision is made; see inline comment in old code below
+            
             if applied_options:
                 return applied_options
         
@@ -160,39 +179,28 @@ class KGProcessEngine:
         #         return decision_result # The current decision might have changed things, so rerun the whole deduction and inference
     
 
-    def request_decision(self, decision_to_make):
-        selected_options = self.try_automated_decision(decision_to_make)
-        
-        if not selected_options:
-            return []
-        
-        return self.automate_decision(decision_to_make, selected_options)
-        
-        # decision_result = self.try_automated_decision(decision_to_make)
-        # if decision_result == None:
-        #     decision_result = self.human_decision(decision_to_make)
-
-        # if decision_result != None:
-        #     self.handle_decision(decision_to_make, decision_result)
-
-        # return decision_result
+    
         
     def try_automated_decision(self, decision_to_make):
         # TODO Implement logic to determine if a decision can be automated
-        strategy = getattr(self, "automation_strategy", None)
-        if strategy is None:
+        if self.automation_strategy is None:
             return []
-        return strategy(decision_to_make)
+        return self.automation_strategy.execute(decision_to_make)
     
     def automate_decision(self, decision_to_make, selected_options):
         applied_options = []
+        #keep track of changes to be introduced
+        pending_effects = set()
         
         for option in selected_options:
             option_id, effect = option
             
-            if any(triple not in self.pkg for triple in effect):
-                self.handle_decision(decision_to_make, option)
+            #apply an option if not already found in pkg and at least one of its effects not already tracked
+            if any(triple not in self.pkg and triple not in pending_effects for triple in effect):
                 applied_options.append(option)
+                pending_effects.update(effect)
+        if applied_options:
+            self.handle_decision(decision_to_make, *applied_options)
         
         return applied_options
 
@@ -252,9 +260,9 @@ class KGProcessEngine:
             yield (task, case)
 
     def set_automation_strategy(self, strategy):
-        if callable(strategy) or strategy is None:
-            self.automation_strategy = strategy
-        else: raise TypeError("Invalid automation strategy")
+        if strategy is not None and not isinstance(strategy, AutomationStrategy):
+            raise TypeError("Invalid automation strategy")
+        self.automation_strategy = strategy
 
 
     
