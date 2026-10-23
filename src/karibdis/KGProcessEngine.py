@@ -8,6 +8,7 @@ import numbers
 import datetime
 
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO, de_urify
+from karibdis import get_logger
 
 class KGProcessEngine:
     def __init__(self, pkg):
@@ -21,7 +22,7 @@ class KGProcessEngine:
             self.handle_event(self.event_queue.get())
 
     def handle_event(self, event):
-        print(event)
+        get_logger().debug(event)
         if event.get('knowledge_updated', True):
             removed, added = self.deduce(event)
             if len(removed) > 0 or len(added) > 0:
@@ -79,7 +80,7 @@ class KGProcessEngine:
 
 
     def complete_task(self, task_node):
-        print('Completing task '+str(task_node))
+        get_logger().info('Completing task '+str(task_node))
         to_set = (task_node, BPO.completedAt, Literal(datetime.datetime.now()))
         self.pkg.add(to_set)
         self.handle_event_root({'knowledge_updated': True, 'added': {to_set}, 'removed': set()})
@@ -103,7 +104,7 @@ class KGProcessEngine:
 
 
     def handle_decision(self, decision_to_make, decision_result):
-        print(f'Made decision {str(decision_to_make.decision_type)}, {str(decision_to_make.bindings)}--> {str(decision_result)}')
+        get_logger().info(f'Made decision {str(decision_to_make.decision_type)}, {str(decision_to_make.bindings)}--> {str(decision_result)}')
         option_id, effect = decision_result
         self.pkg += effect
         self.queue_event({'knowledge_updated': True, 'added': effect, 'deleted': set()})
