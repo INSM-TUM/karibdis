@@ -10,9 +10,9 @@ class Experiment:
         self.total += 1
         if bool_test:
             self.correct += 1
-            print('\033[92m✓', end='')
+            print('\033[92m✓\033[0m', end='')
         else:
-            print('\033[91m✗', end='')
+            print('\033[91m✗\033[0m', end='')
             pass # for enabling debugging breakpoints
 
     def results(self):
@@ -25,13 +25,22 @@ class Experiment:
         return result
 
 
-    def test_two_classes(self, low_cases, high_cases, key):
-        low_results = list(map(self.run_system, low_cases))
-        high_results = list(map(self.run_system, high_cases))
-        for low_res in low_results:
-            for high_res in high_results:
+    def test_two_classes(self, low_cases, high_cases, *keys):
+        self.low_results = list(map(self.run_system, low_cases))
+        self.high_results = list(map(self.run_system, high_cases))
+        for low_res in self.low_results:
+            for high_res in self.high_results:
                 # test_func(low_res, high_res)
-                self.test(high_res.get(key, (0, '')) > low_res.get(key, (0, '')))
+                for key in keys:
+                    self.test(high_res.get(key, (0, '')) > low_res.get(key, (0, '')))
+
+        low_reasons = ['\n'.join(result.get(key, (0, ''))[1]) for result in self.low_results]
+        high_reasons = ['\n'.join(result.get(key, (0, ''))[1]) for result in self.high_results]
+        print('')
+        for reason in low_reasons:
+            print(f'\033[91m{reason}\033[0m')
+        for reason in high_reasons:
+            print(f'\033[92m{reason}\033[0m')
 
 class SystemUnderEvaluation:
     pass
