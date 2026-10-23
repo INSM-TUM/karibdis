@@ -45,7 +45,7 @@
     sh:severity sh:Info;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Lactate levels should be measured in patients suspected of having sepsis." ; # TODO remove once already measured
+        sh:message "Lactate levels should be measured as the patient is suspected of having sepsis." ; # TODO remove once already measured
         sh:select """
             SELECT  $this (5 AS ?value)
             WHERE {
@@ -160,9 +160,9 @@ log:ProcessValue_SIRSCritTemperature a :SIRSCriterion ;
     sh:severity sh:Info;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Antimicrobials with MRSA coverage should be used exactly if the Risk for MRSA is high." ;
+        sh:message "Antimicrobials with MRSA coverage should{?maybenot} be used, as the Risk for MRSA is{?maybenot} high." ; # TODO make messages dynamic based on whether applying positively or negatively
         sh:select """
-            SELECT  $this (IF(?MRSA_risk, 5, -3) AS ?value)
+            SELECT  $this (IF(?MRSA_risk, 5, -3) AS ?value) (IF(?MRSA_risk, "", " not") AS ?maybenot)
             WHERE {
                 $this :instanceOf__hypothetical log:Activity_Administer%20Antimicrobials .
                 BIND(EXISTS {  
@@ -181,9 +181,13 @@ log:ProcessValue_SIRSCritTemperature a :SIRSCriterion ;
     sh:severity sh:Info;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Two gram-negative antimicrobials should be used exactly if the risk for multi-drug resistance is high and the causative pathogen is unknown." ;
+        sh:message "Additional gram-negative antimicrobials should{?maybenot} be used, as {?alreadyused} and {?riskexp}{?pathogenexp}." ;
         sh:select """
-            SELECT  $this (IF(?MDR_risk && !?pathogen_known && ?count_already_administered_gram_negative < 2, 5, -2) AS ?value)
+            SELECT  $this (IF(?shouldbeused, 5, -2) AS ?value) 
+                (IF(?shouldbeused, "", " not") AS ?maybenot) 
+                (CONCAT(IF(?MDR_risk && ?pathogen_known, "although ", ""), "the risk for multi-drug resistance is", IF(?MDR_risk, " high", " not high")) AS ?riskexp)
+                (CONCAT(IF(?MDR_risk = !?pathogen_known, " and ", IF(!?pathogen_known, "although ", ", ")), "the causative pathogen is", IF(?pathogen_known, " not unknown", " unknown")) AS ?pathogenexp)
+                (CONCAT(IF(?count_already_administered_gram_negative < 2, IF(?count_already_administered_gram_negative < 2 && !?shouldbeused, " although only ", "only "), "already "), STR(?count_already_administered_gram_negative), " gram-negative antimicrobials have been administered so far") AS ?alreadyused)
             WHERE {
                 $this :instanceOf__hypothetical log:Activity_Administer%20Antimicrobials .
                 BIND(EXISTS {  
@@ -202,6 +206,8 @@ log:ProcessValue_SIRSCritTemperature a :SIRSCriterion ;
                     }
                 }
 
+                BIND(?MDR_risk && !?pathogen_known && ?count_already_administered_gram_negative < 2 AS ?shouldbeused)
+
                 $this log:ProcessValue_administered%20agent__hypothetical / log:is_gram_negative true .
             }
         """ ;
@@ -215,9 +221,9 @@ log:ProcessValue_SIRSCritTemperature a :SIRSCriterion ;
     sh:severity sh:Info;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Antifungals should be used exactly if the risk for a fungal infection is high." ;
+        sh:message "Antifungals should{?maybenot} be used as the risk for a fungal infection is{?maybenot} high." ;
         sh:select """
-            SELECT  $this (IF(?fungus_risk, 5, -2) AS ?value)
+            SELECT  $this (IF(?fungus_risk, 5, -2) AS ?value) (IF(?fungus_risk, "", " not") AS ?maybenot)
             WHERE {
                 $this :instanceOf__hypothetical log:Activity_Administer%20Antimicrobials .
                 BIND(EXISTS {  
