@@ -138,5 +138,5 @@ def test_validation_graph_colors(solara_test, page_session: Page):
         assert_graph_colors(importer, existing_nodes, existing_edges)
         
         #uncomment to inspect the graphs generated in each stage in browser
-        page_session.pause()
+        # page_session.pause()
     
