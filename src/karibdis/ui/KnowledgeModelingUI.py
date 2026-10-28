@@ -459,7 +459,7 @@ def visualize_addition_graph(importer): # TODO Partial duplicate to GraphViz
         if (subject, predicate, object) in existing_edges:
             return "#BBBBBB"
         else:
-            return None
+            return "#99AA00"
 
     return draw_graph(importer.addition_graph, 
                       color_func=lambda _: {
