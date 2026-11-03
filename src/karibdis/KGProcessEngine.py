@@ -14,46 +14,46 @@ from karibdis import get_logger
 ### ==== Abstract Strategy Class ====
 class AutomationStrategy(ABC):
     @abstractmethod
-    def execute(self, decision):
+    def select_options(self, decision):
         pass
 
 class NeverStrategy(AutomationStrategy):
-    def execute(self, decision):
+    def select_options(self, decision):
         return []
     
 class UnambiguousSingleChoiceStrategy(AutomationStrategy):
     def __init__(self, x=0, y=float("-inf")):
+        if not x > y:
+            raise ValueError("x must be greater than y.")
         self.x = x
         self.y = y
+    
     
     # UnambiguousSingleChoice : 
     # With parameters x,y, select {o} iff 
     # S(o) > x 
     # and S(o') <= y for all o' != o. 
     # Default x,y = (0, -∞)
-    
-    def execute(self, decision):
+    def select_options(self, decision):
         results = decision.get_top_k_results()
         
-        above_y_count = sum(score > self.y for score, _, _ in results)
+        if results:
+            #get_top_k_results() sorts options from highest to lowest score
+            #it's enough to check that the highest score is greater than x and the next highest score is at most y
+            top_score, top_option, _ = results[0]
+            
+            options_above_y = (len(results) != 1 and results[1][0] > self.y)
+            
+            if top_score > self.x and not options_above_y:
+                return [top_option]
         
-        #every option in results has at least one non-self option with score > y, thus disqualifying it 
-        if above_y_count > 1:
-            return []
-        
-        eligible_options = [
-            option for score, option, _ in results
-            if score > self.x and (above_y_count == 0 or score > self.y)
-        ]
-        
-        return eligible_options if len(eligible_options) == 1 else []
-        
+        return []
 
 class KGProcessEngine:
-    def __init__(self, pkg):
+    def __init__(self, pkg, automation_strategy=None):
         self.pkg = pkg
         self.event_queue = queue.Queue()
-        self.automation_strategy = None
+        self.set_automation_strategy(automation_strategy) #using the setter rather than assigning directly to reuse type validation logic
         self.deduce()
 
     def handle_event_root(self, event): # This needs to be called somewhere
@@ -163,11 +163,11 @@ class KGProcessEngine:
         
         #iterate through open decisions, determine which options should be selected, attempt automatic decision making for each one
         for decision in self.open_decisions():
-            selected_options = self.try_automated_decision(decision)
+            selected_options = self.automation_strategy.select_options(decision)
             applied_options = self.automate_decision(decision, selected_options)
             
             
-            if applied_options:
+            if len(applied_options) > 0:
                 return applied_options
         
         #no decisions were automated, or no open decisions exist
@@ -181,13 +181,6 @@ class KGProcessEngine:
     
 
     
-        
-    def try_automated_decision(self, decision_to_make):
-        # TODO Implement logic to determine if a decision can be automated
-        if self.automation_strategy is None:
-            return []
-        return self.automation_strategy.execute(decision_to_make)
-    
     def automate_decision(self, decision_to_make, selected_options):
         applied_options = []
         #keep track of changes to be introduced
@@ -196,11 +189,11 @@ class KGProcessEngine:
         for option in selected_options:
             option_id, effect = option
             
-            #apply an option if not already found in pkg and at least one of its effects not already tracked
+            #apply an option if not already found in pkg and at least one of its effects (triples it will modify) not already pending
             if any(triple not in self.pkg and triple not in pending_effects for triple in effect):
                 applied_options.append(option)
                 pending_effects.update(effect)
-        if applied_options:
+        if len(applied_options) > 0:
             self.handle_decision(decision_to_make, *applied_options)
         
         return applied_options
