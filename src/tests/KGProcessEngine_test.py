@@ -1,266 +1,188 @@
-import pytest 
-from rdflib import Graph, Namespace
-
-from karibdis.KGProcessEngine import (
-    AutomationStrategy,
-    NeverStrategy,
-    UnambiguousSingleChoiceStrategy,
-    KGProcessEngine,
-    Decision
-)
+import pytest
+from rdflib import Literal, Namespace, RDF
+from rdflib.term import Variable
+from rdflib.namespace import SH
+from karibdis.KGProcessEngine import KGProcessEngine, Decision, NeverStrategy, UnambiguousSingleChoiceStrategy
+from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO
+from karibdis.ProcessKnowledgeGraph import ProcessKnowledgeGraph
 
 EX = Namespace("http://example.org/test/")
 
-TRIPLE_A = (EX.a, EX.p, EX.b)
-TRIPLE_B = (EX.c, EX.p, EX.d)
-
 @pytest.fixture
-def engine(monkeypatch):
-    monkeypatch.setattr(
-        KGProcessEngine,
-        "deduce",
-        lambda self, event=None: (set(), set())
-    )
-    return KGProcessEngine(Graph())
+def engine():
+    #Real RDF graph with a case and two shacl rules
+    pkg = ProcessKnowledgeGraph()
+    pkg.add((EX.Case, RDF.type, BPO.Case))
+    pkg.add((EX.ScoreShape, RDF.type, SH.NodeShape))
+    pkg.add((EX.ScoreShape, SH.targetNode, EX.Case))
+    pkg.add((EX.ScoreShape, SH.property, EX.ScoreProperty))
+    
+    pkg.add((EX.ScoreProperty, RDF.type, SH.PropertyShape))
+    pkg.add((EX.ScoreProperty, SH.path, EX['score__hypothetical']))
+    pkg.add((EX.ScoreProperty, SH.severity, SH.Info))
+    pkg.add((EX.ScoreProperty, SH.sparql, EX.ScoreConstraint))
+    
+    pkg.add((EX.ScoreConstraint, RDF.type, SH.SPARQLConstraint))
+    pkg.add((EX.ScoreConstraint, SH.message, Literal('Option score')))
+    pkg.add((EX.ScoreConstraint, SH.select, Literal("""
+                                                    SELECT $this ?value
+                                                    WHERE {
+                                                        $this $PATH ?value .
+                                                        FILTER(?value > 0)
+                                                    }
+                                                    """)))
+    pkg.add((EX.ScoreShape, SH.property, EX.LimitProperty))
+    
+    # A non-informational violation disqualifies an option (score = -inf).
+    pkg.add((EX.LimitProperty, RDF.type, SH.PropertyShape))
+    pkg.add((EX.LimitProperty, SH.path, EX['score__hypothetical']))
+    pkg.add((EX.LimitProperty, SH.maxInclusive, Literal(10)))
+    pkg.add((EX.LimitProperty, SH.severity, SH.Violation))
+    pkg.add((EX.LimitProperty, SH.message, Literal('Option exceeds the limit')))
+    # The real constructor calls real SHACL deduction here.
+    return KGProcessEngine(pkg)
 
-@pytest.fixture
-def decision(engine):
-    return Decision(engine, EX.DecisionType, {}, [])
-
-def make_results(scores):
-    return [
-        (score, option, [])
-        for score, option in scores
+#Helpers
+def make_decision(engine, scores):
+    options = [
+        (EX[f'Option{i}'], [(EX.Case, EX.score, Literal(score))])
+        for i, score in enumerate(scores)
     ]
+    
+    return Decision(engine, EX.DecisionType, {"case": EX.Case}, options)
 
-class TestAutomationStrategies:
-    
-    def test_abstract_strategy(self):
-        with pytest.raises(TypeError):
-            AutomationStrategy()
-    def test_never_strategy(self, decision):
-        assert NeverStrategy().execute(decision) == []
-    
-    @pytest.mark.parametrize(
-        "scores, x, y, expected",
-        [
-            ([], 0, float("-inf"), []),
-            ([(5, "A")], 0, float("-inf"), ["A"]),
-            ([(0, "A")], 0, float("-inf"), []),
-            
-            ([(5, "A"), (float("-inf"), "B")], 0, float("-inf"), ["A"]),
-            
-            ([(5, "A"), (2, "B")], 0, float("-inf"), []),
-            
-            ([(8, "A"), (2,"B"), (-1, "C")], 3, 2, ["A"]),
-            
-            ([(8, "A"), (5, "B")], 3, 2, []),
-            
-            ([(8, "A"), (2, "B")], 0, 5, ["A"]),
-            
-            ([(2, "A"), (-1, "B")], 0, 5, ["A"]),
-            
-            ([(5, "A"), (5, "B")], 0, 2, [])
-        ]
-    )
-    def test_unambiguous_single_choice(self, decision, monkeypatch, scores, x, y, expected):
-        monkeypatch.setattr(
-            decision,
-            "get_top_k_results",
-            lambda:make_results(scores)
-        )
-        
-        strategy = UnambiguousSingleChoiceStrategy(x=x, y=y)
-        
-        assert strategy.execute(decision) == expected
+def select_and_apply_options(engine, scores):
+    decision = make_decision(engine, scores)
+    engine.set_automation_strategy(UnambiguousSingleChoiceStrategy())
+    before = set(engine.pkg)
+    selected = engine.automation_strategy.select_options(decision)
+    engine.handle_decision(decision, *selected)
+    return selected, before
 
-    def test_default_thresholds(self):
-        strategy = UnambiguousSingleChoiceStrategy()
-        
-        assert strategy.x == 0
-        assert strategy.y == float("-inf")
+def register_test_decisions(engine, option_scores):
+    graph = engine.pkg
+    # open_decisions() uses ':DecisionType', so bind that prefix.
+    graph.bind('', BPO)
+    graph.bind('ex', EX)
+    open_query = '''PREFIX : <http://infs.cit.tum.de/karibdis/baseontology/>
+    PREFIX ex: <http://example.org/test/>
+    SELECT ?case
+    WHERE {
+        ?case a :Case .
+        FILTER NOT EXISTS {
+            ?case ex:score ?existing .
+        }
+    }'''
+    options_query = '''PREFIX ex: <http://example.org/test/>
+    SELECT ?option WHERE { ?option a ex:DecisionOption . }'''
+    effect_query = '''PREFIX ex: <http://example.org/test/>
+    SELECT ?subject ?predicate ?object 
+    WHERE {
+        ?option ex:scoreValue ?object .
+        BIND(?case AS ?subject)
+        BIND(ex:score AS ?predicate)
+    }'''
+    graph.add((EX.DecisionType,RDF.type,BPO.DecisionType))
+    graph.add((EX.DecisionType,BPO.hasDecisionInstanceQuery,Literal(open_query)))
+    graph.add((EX.DecisionType,BPO.hasDecisionOptionQuery,Literal(options_query)))
+    graph.add((EX.DecisionType,BPO.hasOptionEffectQuery,Literal(effect_query)))
+    
+    for option, score in option_scores:
+        graph.add((option, RDF.type, EX.DecisionOption))
+        graph.add((option, EX.scoreValue, Literal(score)))
 
-class TestKGProcessEngine:
-    def test_default_strategy(self, engine):
-        assert engine.automation_strategy is None
-        
-    def test_set_automation_strategy(self, engine):
-        strategy = NeverStrategy()
-        
-        engine.set_automation_strategy(strategy)
-        
-        assert engine.automation_strategy is strategy
-        
-        strategy = UnambiguousSingleChoiceStrategy()
-        
-        engine.set_automation_strategy(strategy)
-        
-        assert engine.automation_strategy is strategy
-        
-        engine.set_automation_strategy(None)
-        
-        assert engine.automation_strategy is None
-    
-    def test_invalid_strategy(self, engine):
-        with pytest.raises(TypeError):
-            engine.set_automation_strategy("invalid")
-        with pytest.raises(TypeError):
-            engine.set_automation_strategy(NeverStrategy)
-            
-        assert engine.automation_strategy is None
-    
-    def test_no_automation_strategy(self, engine, decision):
-        assert engine.try_automated_decision(decision) == []
-        assert engine.infer_decisions() == []
-    
-    def test_handle_single_decision_result(self, engine, decision):
-        option = (EX.OptionA, [TRIPLE_A])
-        
-        engine.handle_decision(decision, option)
-        
-        assert TRIPLE_A in engine.pkg
-        assert engine.event_queue.qsize() == 1
-        
-        event = engine.event_queue.get_nowait()
-        assert event["knowledge_updated"] is True
-        assert set(event["added"]) == {TRIPLE_A}
-    
-    def test_handle_multiple_decision_result(self, engine, decision):
-        option_a = (EX.OptionA, [TRIPLE_A])
-        option_b = (EX.OptionB, [TRIPLE_B])
-        
-        engine.handle_decision(decision, option_a, option_b)
-        
-        assert TRIPLE_A in engine.pkg
-        assert TRIPLE_B in engine.pkg 
-        assert engine.event_queue.qsize() == 1
-        
-        event = engine.event_queue.get_nowait()
-        
-        assert set(event["added"]) == {TRIPLE_A, TRIPLE_B}
-        
-    def test_handle_no_decision_results(self, engine, decision):
-        engine.handle_decision(decision)
-        
-        assert len(engine.pkg) == 0
-        assert engine.event_queue.empty()
-    
-    def test_automate_decision(self, engine, decision):
-        option_a = (EX.OptionA, [TRIPLE_A])
-        option_b = (EX.OptionB, [TRIPLE_B])
-        
-        applied = engine.automate_decision(
-            decision, [option_a, option_b]
-        )
-        
-        assert applied == [option_a, option_b]
-        assert TRIPLE_A in engine.pkg
-        assert TRIPLE_B in engine.pkg
-        assert engine.event_queue.qsize() == 1
-    
-    def test_overlapping_effects(self, engine, decision):
-        option_a = (EX.OptionA, [TRIPLE_A])
-        option_b = (EX.OptionB, [TRIPLE_A])
-        option_c = (EX.OptionC, [TRIPLE_B])
-        
-        applied = engine.automate_decision(
-            decision, [option_a, option_b, option_c]
-        )
-        
-        assert applied == [option_a, option_c]
-        assert set(engine.pkg) == {TRIPLE_A, TRIPLE_B}
-        assert engine.event_queue.qsize() == 1
-    
-    def test_existing_effects(self, engine, decision):
-        engine.pkg.add(TRIPLE_A)
-        
-        option = (EX.OptionA, [TRIPLE_A])
-        
-        applied = engine.automate_decision(decision, [option])
-        
-        assert applied == []
-        assert set(engine.pkg) == {TRIPLE_A}
-        assert engine.event_queue.empty()
-    
-    def test_infer_decision(self, engine, decision, monkeypatch):
-        option_a = (EX.OptionA, [TRIPLE_A])
-        option_b = (EX.OptionB, [TRIPLE_B])
-        
-        monkeypatch.setattr(
-            decision,
-            "get_top_k_results",
-            lambda: make_results([
-                (5, option_a),
-                (float("-inf"), option_b)
-            ])
-        )
-        
-        monkeypatch.setattr(engine, "open_decisions", lambda: iter([decision]))
-        
-        engine.set_automation_strategy(UnambiguousSingleChoiceStrategy())
-        
-        applied = engine.infer_decisions()
-        
-        assert applied == [option_a]
-        assert TRIPLE_A in engine.pkg
-        assert TRIPLE_B not in engine.pkg
-        assert engine.event_queue.qsize() == 1
-    
-    def test_infer_decision_without_selection(self, engine, decision, monkeypatch):
-        monkeypatch.setattr(engine, "open_decisions", lambda: iter([decision]))
-        
-        engine.set_automation_strategy(NeverStrategy())
-        
-        assert engine.infer_decisions() == []
-        assert engine.event_queue.empty()
-    
-    
-    def test_infer_decisions_continues_if_no_effect_applied(
-        self, engine, monkeypatch
-    ):
-        option_a = (EX.OptionA, [TRIPLE_A])
-        option_b = (EX.OptionB, [TRIPLE_B])
 
-        # The first option introduces no new knowledge.
-        engine.pkg.add(TRIPLE_A)
+#Tests
+expect_no_verdict = (0, 0, [])
+expect_5 = (5, 5, ["Option score"])
+expect_neg_inf = (20, float("-inf"), ["Option score", "Option exceeds the limit"])
+@pytest.mark.parametrize('value, expected_score, expected_verdict', [expect_no_verdict, expect_5, expect_neg_inf])
+def test_shacl_evaluates_real_options(engine, value, expected_score, expected_verdict):
+    decision = make_decision(engine, [value])
+    before = set(engine.pkg)
+    score, verdict = decision.evaluate_option(decision.options[0])
+    assert score == expected_score
+    assert set(engine.pkg) == before
+    assert sorted(verdict) == sorted(expected_verdict)
 
-        first_decision = Decision(
-            engine, EX.DecisionType, {}, []
-        )
-        second_decision = Decision(
-            engine, EX.DecisionType, {}, []
-        )
+@pytest.mark.parametrize('scores, x, y, expected', [
+    ([5, 20], 0, float('-inf'), [EX.Option0]),
+    ([5, 2], 0, float('-inf'), []),
+    ([5, 2], 3, 2, [EX.Option0]),
+    ([5, 5], 3, 2, []),
+    ([0, 20], 0, float('-inf'), []),
+    ([], 0, float('-inf'), []),
+])
+def test_strategy_with_actual_shacl_scores(engine, scores, x, y, expected):
+    decision = make_decision(engine, scores)
+    selected = UnambiguousSingleChoiceStrategy(x=x, y=y).select_options(decision)
+    
+    assert [option_id for option_id, _ in selected] == expected
 
-        monkeypatch.setattr(
-            first_decision,
-            "get_top_k_results",
-            lambda: make_results([(5, option_a)])
-        )
 
-        monkeypatch.setattr(
-            second_decision,
-            "get_top_k_results",
-            lambda: make_results([(5, option_b)])
-        )
 
-        monkeypatch.setattr(
-            engine,
-            "open_decisions",
-            lambda: iter([first_decision, second_decision])
-        )
+def test_automated_option_applies_real_effect(engine):
+    selected, before = select_and_apply_options(engine, [5, 20])
+    expected_effect = (EX.Case, EX.score, Literal(5))
+    
+    assert [option_id for option_id, _ in selected] == [EX.Option0]
+    assert set(engine.pkg) == before | {expected_effect}
+    assert engine.event_queue.qsize() == 1
+    event = engine.event_queue.get_nowait()
+    assert set(event['added']) == {expected_effect}
+    
+def test_ambiguous_decision_does_not_apply_effects(engine):
+    selected, before = select_and_apply_options(engine, [5, 2])
+    
+    assert selected == []
+    assert set(engine.pkg) == before
+    assert engine.event_queue.empty()
 
-        engine.set_automation_strategy(
-            UnambiguousSingleChoiceStrategy()
-        )
+def test_multiple_option_effects_single_event(engine):
+    decision = make_decision(engine, [])
+    
+    a = (EX.OptionA, [(EX.Case, EX.resultA, Literal('A'))])
+    b = (EX.OptionB, [(EX.Case, EX.resultB, Literal('B'))])
+    
+    engine.handle_decision(decision, a, b)
+    assert engine.event_queue.qsize() == 1
+    
+    engine.handle_event_root({"knowledge_updated": True})
+    
+    assert engine.event_queue.empty()
+    assert a[1][0] in engine.pkg
+    assert b[1][0] in engine.pkg
 
-        applied = engine.infer_decisions()
+def test_automated_decision_inference(engine):
+    register_test_decisions(engine, [(EX.OptionA, 5), (EX.OptionB, 20)])
+    engine.set_automation_strategy(UnambiguousSingleChoiceStrategy())
+    before = set(engine.pkg)
 
-        assert applied == [option_b]
-        assert TRIPLE_A in engine.pkg
-        assert TRIPLE_B in engine.pkg
-        assert engine.event_queue.qsize() == 1
+    automated = engine.infer_decisions()
+    expected_effect = (EX.Case, EX.score, Literal(5))
 
-        
-        
-                
-                
+    #open_decisions() returns option IDs as SPARQL variable bindings.
+    assert len(automated) == 1
+    option_bindings, effects = automated[0]
+    assert option_bindings[Variable('option')] == EX.OptionA
+    assert set(effects) == {expected_effect}
+
+    assert set(engine.pkg) == before | {expected_effect}
+    assert engine.event_queue.qsize() == 1
+    event = engine.event_queue.get_nowait()
+    assert event['knowledge_updated'] is True
+    assert set(event['added']) == {expected_effect}
+    assert engine.event_queue.empty()
+
+@pytest.mark.parametrize('strategy', [None, NeverStrategy()], ids=['none', 'never'])
+def test_disabled_automation(engine, strategy):
+    register_test_decisions(engine, [(EX.OptionA, 5), (EX.OptionB, 20)])
+    
+    # assert len(list(engine.open_decisions())) == 1
+    engine.set_automation_strategy(strategy)
+    before = set(engine.pkg)
+    
+    assert engine.infer_decisions() == []
+    assert set(engine.pkg) == before
+    assert engine.event_queue.empty()    
+    

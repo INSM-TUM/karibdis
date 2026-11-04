@@ -53,7 +53,7 @@ class KGProcessEngine:
     def __init__(self, pkg, automation_strategy=None):
         self.pkg = pkg
         self.event_queue = queue.Queue()
-        self.set_automation_strategy(automation_strategy) #using the setter rather than assigning directly to reuse type validation logic
+        self.set_automation_strategy(automation_strategy) 
         self.deduce()
 
     def handle_event_root(self, event): # This needs to be called somewhere
@@ -161,43 +161,19 @@ class KGProcessEngine:
         if self.automation_strategy is None:
             return []
         
+        automated_options = []
         #iterate through open decisions, determine which options should be selected, attempt automatic decision making for each one
         for decision in self.open_decisions():
             selected_options = self.automation_strategy.select_options(decision)
-            applied_options = self.automate_decision(decision, selected_options)
             
-            
-            if len(applied_options) > 0:
-                return applied_options
+            if len(selected_options) > 0:
+                self.handle_decision(decision, *selected_options)
+                automated_options.extend(selected_options)
         
         #no decisions were automated, or no open decisions exist
-        return []
+        return automated_options
         
-        # open_decisions = self.open_decisions()
-        # for decision in open_decisions:
-        #     decision_result = self.request_decision(decision)
-        #     if decision_result != None:
-        #         return decision_result # The current decision might have changed things, so rerun the whole deduction and inference
-    
-
-    
-    def automate_decision(self, decision_to_make, selected_options):
-        applied_options = []
-        #keep track of changes to be introduced
-        pending_effects = set()
         
-        for option in selected_options:
-            option_id, effect = option
-            
-            #apply an option if not already found in pkg and at least one of its effects (triples it will modify) not already pending
-            if any(triple not in self.pkg and triple not in pending_effects for triple in effect):
-                applied_options.append(option)
-                pending_effects.update(effect)
-        if len(applied_options) > 0:
-            self.handle_decision(decision_to_make, *applied_options)
-        
-        return applied_options
-
     # @deprecated("For development purpose only")
     def random_decision(self, decision_to_make):
         import random
