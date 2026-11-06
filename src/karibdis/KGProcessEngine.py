@@ -6,14 +6,54 @@ from random import shuffle
 from pyshacl.consts import SH_ValidationResult, SH_resultSeverity, SH_value, SH_sourceShape, SH_resultMessage, SH_Info
 import numbers
 import datetime
+from abc import ABC, abstractmethod
 
 from karibdis.utils import BASE_PROCESS_ONTOLOGY as BPO, de_urify
 from karibdis import get_logger
 
+### ==== Abstract Strategy Class ====
+class AutomationStrategy(ABC):
+    @abstractmethod
+    def select_options(self, decision):
+        pass
+
+class NeverStrategy(AutomationStrategy):
+    def select_options(self, decision):
+        return []
+    
+class UnambiguousSingleChoiceStrategy(AutomationStrategy):
+    def __init__(self, x=0, y=float("-inf")):
+        if not x > y:
+            raise ValueError("x must be greater than y.")
+        self.x = x
+        self.y = y
+    
+    
+    # UnambiguousSingleChoice : 
+    # With parameters x,y, select {o} iff 
+    # S(o) > x 
+    # and S(o') <= y for all o' != o. 
+    # Default x,y = (0, -∞)
+    def select_options(self, decision):
+        results = decision.get_top_k_results()
+        
+        if results:
+            #get_top_k_results() sorts options from highest to lowest score
+            #it's enough to check that the highest score is greater than x and the next highest score is at most y
+            top_score, top_option, _ = results[0]
+            
+            options_above_y = (len(results) != 1 and results[1][0] > self.y)
+            
+            if top_score > self.x and not options_above_y:
+                return [top_option]
+        
+        return []
+
 class KGProcessEngine:
-    def __init__(self, pkg):
+    def __init__(self, pkg, automation_strategy=None):
         self.pkg = pkg
         self.event_queue = queue.Queue()
+        self.set_automation_strategy(automation_strategy) 
         self.deduce()
 
     def handle_event_root(self, event): # This needs to be called somewhere
@@ -28,8 +68,9 @@ class KGProcessEngine:
             if len(removed) > 0 or len(added) > 0:
                 self.queue_event({'knowledge_updated': True, 'removed': removed, 'added': added})
             else:
-                pass
-                # TODO self.infer_decisions()
+                self.infer_decisions()
+
+                
                         
 
     def queue_event(self, event):
@@ -103,34 +144,36 @@ class KGProcessEngine:
                 yield Decision(self, type.dtype, decision_instance, list(zip(option_ids, option_effects)))
 
 
-    def handle_decision(self, decision_to_make, decision_result):
+    def handle_decision(self, decision_to_make, *decision_result):
+        if not decision_result:
+            return
         get_logger().info(f'Made decision {str(decision_to_make.decision_type)}, {str(decision_to_make.bindings)}--> {str(decision_result)}')
-        option_id, effect = decision_result
-        self.pkg += effect
-        self.queue_event({'knowledge_updated': True, 'added': effect, 'deleted': set()})
+        # option_id, effect = decision_result
+        effects = [
+            triple
+            for option_id, effect in decision_result
+            for triple in effect
+        ]
+        self.pkg += effects
+        self.queue_event({'knowledge_updated': True, 'added': effects, 'deleted': set()})
     
     def infer_decisions(self):
-        open_decisions = self.open_decisions()
-        for decision in open_decisions:
-            decision_result = self.request_decision(decision)
-            if decision_result != None:
-                return decision_result# The current decision might have changed things, so rerun the whole deduction and inference
-    
-
-    def request_decision(self, decision_to_make):
-        decision_result = self.try_automated_decision(decision_to_make)
-        if decision_result == None:
-            decision_result = self.human_decision(decision_to_make)
-
-        if decision_result != None:
-            self.handle_decision(decision_to_make, decision_result)
-
-        return decision_result
+        if self.automation_strategy is None:
+            return []
         
-    def try_automated_decision(self, decision_to_make):
-        # TODO Implement logic to determine if a decision can be automated
-        return None
-
+        automated_options = []
+        #iterate through open decisions, determine which options should be selected, attempt automatic decision making for each one
+        for decision in self.open_decisions():
+            selected_options = self.automation_strategy.select_options(decision)
+            
+            if len(selected_options) > 0:
+                self.handle_decision(decision, *selected_options)
+                automated_options.extend(selected_options)
+        
+        #no decisions were automated, or no open decisions exist
+        return automated_options
+        
+        
     # @deprecated("For development purpose only")
     def random_decision(self, decision_to_make):
         import random
@@ -185,6 +228,12 @@ class KGProcessEngine:
         open_tasks = self.pkg.query(open_tasks_query)
         for task, case in open_tasks:
             yield (task, case)
+
+    def set_automation_strategy(self, strategy):
+        if strategy is not None and not isinstance(strategy, AutomationStrategy):
+            raise TypeError("Invalid automation strategy")
+        self.automation_strategy = strategy
+
 
     
 class Decision:
