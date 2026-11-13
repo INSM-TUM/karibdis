@@ -1,6 +1,10 @@
 import datetime as dt
 
+
+
 class Experiment:
+    """Wrapper for one experiment relating to one guideline."""
+
     def __init__(self, system_under_eval):
         self.system_under_eval = system_under_eval
         self.correct = 0
@@ -13,6 +17,15 @@ class Experiment:
             print('\033[92m✓\033[0m', end='')
         else:
             print('\033[91m✗\033[0m', end='')
+            pass # for enabling debugging breakpoints
+
+    def test_optional(self, bool_test):
+        # self.total += 1
+        if bool_test:
+            # self.correct += 1
+            print('\033[92m(✓)\033[0m', end='')
+        else:
+            print('\033[91m(✗)\033[0m', end='')
             pass # for enabling debugging breakpoints
 
     def results(self):
@@ -38,9 +51,10 @@ class Experiment:
         high_reasons = ['\n'.join(result.get(key, (0, ''))[1]) for result in self.high_results]
         print('')
         for reason in low_reasons:
-            print(f'\033[91m{reason}\033[0m')
+            print(f'\033[91m> {reason}\033[0m')
         for reason in high_reasons:
-            print(f'\033[92m{reason}\033[0m')
+            print(f'\033[92m> {reason}\033[0m')
+
 
 class SystemUnderEvaluation:
     pass

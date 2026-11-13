@@ -45,12 +45,15 @@
     sh:severity sh:Info;
     sh:sparql [
         a sh:SPARQLConstraint ;
-        sh:message "Lactate levels should be measured as the patient is suspected of having sepsis." ; # TODO remove once already measured
+        sh:message "Lactate levels should be measured as the patient is suspected of having sepsis." ; 
         sh:select """
             SELECT  $this (5 AS ?value)
             WHERE {
                 $this :instanceOf__hypothetical log:Activity_Measure%20Blood%20Lactate .
                 $this :partOf / :ProcessValue_suspected <http://purl.obolibrary.org/obo/MONDO_1040015> . # Sepsis
+                FILTER NOT EXISTS {
+                    $this :partOf / ^:partOf / log:ProcessValue_blood%20lactate ?already_measured_lactate .
+                }
             }
         """ ;
     ] .
@@ -111,6 +114,21 @@
             }
         """ ;
     ] .
+
+:SIRSCriterion a owl:Class ;
+    rdfs:subClassOf :Criterion ;
+    rdfs:label "SIRS Criterion" .
+
+:range_from a owl:DatatypeProperty ;
+    rdfs:range xsd:decimal .
+
+:range_to a owl:DatatypeProperty ;
+    rdfs:range xsd:decimal .
+
+:biomarker a owl:ObjectProperty ;
+    rdfs:domain :SIRSCriterion ;
+    rdfs:range :ProcessValue . # TODO Could be more specific and use biomarker from ontology
+
 
 log:ProcessValue_SIRSCritLeucos a :SIRSCriterion ;
     :range_from 4 ;

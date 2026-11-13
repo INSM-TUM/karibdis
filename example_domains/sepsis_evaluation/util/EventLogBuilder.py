@@ -62,7 +62,7 @@ class EventLogBuilder:
         event: dict[str, Any] = {
             ACTIVITY : self._current_activity, 
             TASK_ID : self._current_task , 
-            TIMESTAMP: dt.datetime.fromisoformat(timestamp), 
+            TIMESTAMP: _fromisoformat_utcfy(timestamp), 
             TRANSITION : transition 
         }
         if attributes:
@@ -77,7 +77,7 @@ class EventLogBuilder:
         return self._event(end_timestamp, "complete", attributes)
 
     def set_current_time(self, timestamp):
-        self._current_time = dt.datetime.fromisoformat(timestamp)
+        self._current_time = _fromisoformat_utcfy(timestamp)
         return self
 
     def get_current_time(self):
@@ -154,5 +154,9 @@ def _xes_value(value: Any) -> str:
         return value.astimezone().isoformat()
     return str(value)
 
-
+def _fromisoformat_utcfy(timestamp):
+    time = dt.datetime.fromisoformat(timestamp)
+    if time.tzinfo is None:
+        time = time.replace(tzinfo=dt.timezone.utc)
+    return time
 
