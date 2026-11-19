@@ -11,6 +11,8 @@
 # files from their respective distributions and use the filenames shown above.
 # Input paths are resolved relative to the script, not the working directory.
 import os
+import tarfile
+import tempfile
 from urllib.parse import quote
 import requests
 import rdflib
@@ -20,6 +22,9 @@ import gzip #reading the compressed dataset
 from collections import deque, defaultdict
 import json
 
+from dotenv import load_dotenv
+import urllib
+load_dotenv() 
 API_KEY = os.environ["BIOPORTAL_API_KEY"]
 
 SNOMED = rdflib.Namespace("http://purl.bioontology.org/ontology/SNOMEDCT/")
@@ -81,7 +86,10 @@ def get_base_info(concept_uri):
 
 # Traverse the SNOMED CT ancestors of the seed concepts using bfs.
 # Populate the concept metadata and child-parent relationship collections.
-def collect_hierarchy(concept_uris, concepts, relationships):
+def collect_hierarchy(concept_uris):
+    concepts = {}
+    relationships = set()
+
     queue = deque(str(concept_uri) for concept_uri in concept_uris)
     discovered = set(queue)
 
@@ -106,6 +114,8 @@ def collect_hierarchy(concept_uris, concepts, relationships):
             if parent_uri not in discovered:
                 discovered.add(parent_uri)
                 queue.append(parent_uri)
+    return concepts, relationships
+    
 
 
 # Convert the collected concepts and subclass relationships into an RDF graph.
@@ -146,7 +156,7 @@ def find_antibiotic_seeds(seed_uris, concepts, owl_graph):
         if concept == ANTIBACTERIAL:
             continue
 
-        ancestors = owl_graph.transitive_objects(concept, rdflib.RDFS.subClassOf)
+        ancestors = owl_graph.transitive_objects(concept, rdflib.RDFS.subClassOf) # TODO: Could be one statement (get subjects with predicate subClass* and object ANTIBACTERIAL, to set intersection)
 
         if ANTIBACTERIAL in ancestors:
             antibiotics[str(concept)] = concepts[str(concept)]["label"]
@@ -170,7 +180,7 @@ def find_resistance_determinants(antibiotic_name, aro_graph):
 
         label = aro_graph.value(antibiotic, rdflib.RDFS.label)
 
-        if label is None or str(label).casefold() != antibiotic_name.casefold():
+        if label is None or str(label).casefold() != antibiotic_name.casefold(): # TODO string-based matching?
             continue
 
         for determinant in aro_graph.subjects(rdflib.RDFS.subClassOf, restriction):
@@ -457,8 +467,36 @@ def add_resistance_relationships(owl_graph, new_microbes, resistance_pairs):
 def main():
     base_path = Path(__file__).resolve().parent
     aro_path = base_path / "aro.owl"
-    index_path = base_path / "card_data" / "index-for-model-sequences.txt.gz"
-    taxonomy_path = base_path / "card_data" / "ncbi_taxonomy.json"
+    card_data_path = base_path / "card_data"
+    index_path = card_data_path / "index-for-model-sequences.txt.gz"
+    taxonomy_path = card_data_path / "ncbi_taxonomy.json"
+
+    
+    if not aro_path.is_file():
+        print(f'Downloading ARO ontology to {aro_path} ...')
+        urllib.request.urlretrieve(f'https://data.bioontology.org/ontologies/ARO/submissions/23/download?apikey={API_KEY}', str(aro_path))
+
+    if not card_data_path.is_dir():
+        card_data_path.mkdir(parents=True, exist_ok=True)
+
+    if not index_path.is_file():
+        print(f'Downloading index file to {index_path}. This may take a while! ...')
+        with tempfile.TemporaryDirectory() as tempdir:
+            genomes_tar = Path(tempdir) / 'ontology-v4.0.2.tar.bz2'
+            urllib.request.urlretrieve('https://card.mcmaster.ca/download/6/prevalence-v4.0.2.tar.bz2', genomes_tar)
+            print(f'\tDownload complete, extracting. This may take a while! ...')
+            with tarfile.open(genomes_tar, 'r:bz2') as tar:
+                with open(index_path, 'wb') as f:
+                    f.write(tar.extractfile(f'./{index_path.name}').read()) # Current python version doesn't seem to support path parameter for direct extraction
+
+    if not taxonomy_path.is_file():
+        print(f'Downloading taxonomy file to {taxonomy_path} ...')
+        with tempfile.TemporaryDirectory() as tempdir:
+            ontology_tar = Path(tempdir) / 'ontology-v4.0.2.tar.bz2'
+            urllib.request.urlretrieve('https://card.mcmaster.ca/download/5/ontology-v4.0.2.tar.bz2', ontology_tar)
+            with tarfile.open(ontology_tar, 'r:bz2') as tar:
+                with open(taxonomy_path, 'wb') as f:
+                    f.write(tar.extractfile(f'./{taxonomy_path.name}').read()) # Current python version doesn't seem to support path parameter for direct extraction
 
     for path in (aro_path, index_path, taxonomy_path):
         if not path.is_file():
@@ -472,14 +510,11 @@ def main():
 
     # ====== HIERARCHY EXTRACTION ======
 
-    concepts = {}
-    relationships = set()
-
-    collect_hierarchy(seed_uris, concepts, relationships)
+    concepts, relationships = collect_hierarchy(seed_uris)
     print(f"\nTotal concepts: {len(concepts)}")
     print(f"Total subclass relationships: {len(relationships)}")
 
-    owl_graph = owlify(concepts, relationships)
+    owl_graph = owlify(concepts, relationships) # TODO: only needs owl graph going forward; can nest
 
     # ====== ANTIBIOTIC-MICROBE MATCHING ======
 
