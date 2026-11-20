@@ -81,16 +81,16 @@
         a sh:SPARQLRule ;
         sh:construct """
             CONSTRUCT {
-                ?this log:ProcessValue_SIRSCriteria2OrMore ?two_or_more.
-            } WHERE {
-                OPTIONAL {
-                    ?this log:ProcessValue_SIRSCritLeucos ?leucos .
-                    ?this log:ProcessValue_SIRSCritTachypnea ?tachypnea .
-                    ?this log:ProcessValue_SIRSCritHeartRate ?heartrate .
-                    ?this log:ProcessValue_SIRSCritTemperature ?temperature .
+                $this log:ProcessValue_SIRSCriteria2OrMore ?two_or_more .
+            }
+            WHERE {
+                {
+                    SELECT (COUNT(DISTINCT ?fulfilled_SIRS_criterion) >= 2 AS ?two_or_more)
+                    WHERE {
+                        ?fulfilled_SIRS_criterion a :SIRSCriterion .
+                        $this ?fulfilled_SIRS_criterion true .
+                    }
                 }
-                BIND(IF(?leucos = true, 1, 0) + IF(?tachypnea = true, 1, 0) + IF(?heartrate = true, 1, 0) + IF(?temperature = true, 1, 0) AS ?sirs_count) .
-                BIND(?sirs_count >= 2 AS ?two_or_more)
             }
         """ ;
     ] .

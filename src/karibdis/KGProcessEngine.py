@@ -128,6 +128,11 @@ class KGProcessEngine:
 
     
     def open_decisions(self):
+        def _options(type, decision_instance):
+            option_ids = self.pkg.query(type.optionsQuery, initBindings=decision_instance).bindings
+            option_effects = [list(self.pkg.query(type.effectQuery, initBindings={**decision_instance, **option})) for option in option_ids]
+            return list(zip(option_ids, option_effects))
+
         decision_types = self.pkg.query('''
         SELECT ?dtype ?openDecisionQuery ?optionsQuery ?effectQuery WHERE {
             ?dtype rdf:type :DecisionType .
@@ -139,9 +144,19 @@ class KGProcessEngine:
         for type in decision_types:
             open_decisions = self.pkg.query(type.openDecisionQuery).bindings
             for decision_instance in open_decisions:
-                option_ids = self.pkg.query(type.optionsQuery, initBindings=decision_instance).bindings
-                option_effects = [list(self.pkg.query(type.effectQuery, initBindings={**decision_instance, **option})) for option in option_ids]
-                yield Decision(self, type.dtype, decision_instance, list(zip(option_ids, option_effects)))
+                options = _options(type, decision_instance)
+                # TODO implicit assumption: Decision type either has an instance query, XOR a direct superclass that does
+                subtypes = list(self.pkg.query('''
+                SELECT ?dtype ?optionsQuery ?effectQuery WHERE {
+                    ?dtype rdf:type :DecisionType .
+                    ?dtype rdfs:subClassOf ?currentdtype .
+                    ?dtype :hasDecisionOptionQuery ?optionsQuery .
+                    ?dtype :hasOptionEffectQuery ?effectQuery .
+                }''', initBindings={'currentdtype' : type.dtype})) # TODO: Strong partial duplicate of previous query
+                for subtype in subtypes:
+                    options += _options(subtype, decision_instance)
+
+                yield Decision(self, type.dtype, decision_instance, options)
 
 
     def handle_decision(self, decision_to_make, *decision_result):

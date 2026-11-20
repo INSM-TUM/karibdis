@@ -20,6 +20,9 @@
     :is_antiMRSA false ;
     :is_gram_negative true .
 <http://purl.bioontology.org/ontology/SNOMEDCT/372602008> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> . # Metronidazole
+<http://purl.bioontology.org/ontology/SNOMEDCT/372786004> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/419241000> ; # Clindamycin
+    :is_antiMRSA true ;
+    :is_gram_negative false .
 
 
 <http://purl.bioontology.org/ontology/SNOMEDCT/373219008> rdfs:subClassOf <http://purl.bioontology.org/ontology/SNOMEDCT/373249005> . # Antifungal
