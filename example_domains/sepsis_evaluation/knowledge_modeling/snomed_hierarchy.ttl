@@ -1,0 +1,419 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix snomed: <http://purl.bioontology.org/ontology/SNOMEDCT/> .
+
+snomed:112283007 a owl:Class ;
+    rdfs:label "Escherichia coli" ;
+    rdfs:subClassOf snomed:64735005 .
+
+snomed:115329001 a owl:Class ;
+    rdfs:label "Methicillin resistant Staphylococcus aureus" ;
+    rdfs:subClassOf snomed:3092008,
+        snomed:710891006 .
+
+snomed:372602008 a owl:Class ;
+    rdfs:label "Metronidazole" ;
+    rdfs:subClassOf snomed:373235001,
+        snomed:419241000 .
+
+snomed:372670001 a owl:Class ;
+    rdfs:label "Ceftriaxone" ;
+    rdfs:subClassOf snomed:372859005 .
+
+snomed:372735009 a owl:Class ;
+    rdfs:label "Vancomycin" ;
+    rdfs:subClassOf snomed:414355008 .
+
+snomed:372786004 a owl:Class ;
+    rdfs:label "Clindamycin" ;
+    rdfs:subClassOf snomed:259274001,
+        snomed:419241000 .
+
+snomed:372836004 a owl:Class ;
+    rdfs:label "Piperacillin" ;
+    rdfs:subClassOf snomed:373218000,
+        snomed:373274008 .
+
+snomed:373570003 a owl:Class ;
+    rdfs:label "Echinocandin" ;
+    rdfs:subClassOf snomed:373219008,
+        snomed:416590002 .
+
+snomed:387174006 a owl:Class ;
+    rdfs:label "Fluconazole" ;
+    rdfs:subClassOf snomed:372632000 .
+
+snomed:53326005 a owl:Class ;
+    rdfs:label "Candida albicans" ;
+    rdfs:subClassOf snomed:141000112105 .
+
+snomed:96048006 a owl:Class ;
+    rdfs:label "Cefepime" ;
+    rdfs:subClassOf snomed:395959007 .
+
+snomed:106544002 a owl:Class ;
+    rdfs:label "Enterobacteriaceae" ;
+    rdfs:subClassOf snomed:115173005,
+        snomed:417937002,
+        snomed:77309002 .
+
+snomed:11257001 a owl:Class ;
+    rdfs:label "Nitrogen compound" ;
+    rdfs:subClassOf snomed:767307008 .
+
+snomed:115173005 a owl:Class ;
+    rdfs:label "Facultatively anaerobic gram-negative rod" ;
+    rdfs:subClassOf snomed:81325006 .
+
+snomed:115195009 a owl:Class ;
+    rdfs:label "Bacillota" ;
+    rdfs:subClassOf snomed:409822003 .
+
+snomed:1197605003 a owl:Class ;
+    rdfs:label "Substance with triazole structure" ;
+    rdfs:subClassOf snomed:300903003 .
+
+snomed:127535004 a owl:Class ;
+    rdfs:label "Staphylococcus, coagulase positive" ;
+    rdfs:subClassOf snomed:65119002 .
+
+snomed:1354652006 a owl:Class ;
+    rdfs:label "Saccharomycotina" ;
+    rdfs:subClassOf snomed:415098006 .
+
+snomed:141000112105 a owl:Class ;
+    rdfs:label "Candida albicans complex" ;
+    rdfs:subClassOf snomed:3265006 .
+
+snomed:243226004 a owl:Class ;
+    rdfs:label "Catalase-positive Gram-positive coccus" ;
+    rdfs:subClassOf snomed:59206002 .
+
+snomed:259274001 a owl:Class ;
+    rdfs:label "Pyrrolidine" ;
+    rdfs:subClassOf snomed:301457005 .
+
+snomed:27471002 a owl:Class ;
+    rdfs:label "Aerobic bacteria" ;
+    rdfs:subClassOf snomed:409822003 .
+
+snomed:301457005 a owl:Class ;
+    rdfs:label "Amine and/or amine derivative" ;
+    rdfs:subClassOf snomed:299979007 .
+
+snomed:301844007 a owl:Class ;
+    rdfs:label "Glycopeptide" ;
+    rdfs:subClassOf snomed:88878007 .
+
+snomed:3092008 a owl:Class ;
+    rdfs:label "Staphylococcus aureus" ;
+    rdfs:subClassOf snomed:127535004,
+        snomed:44651000087108,
+        snomed:49971000087105 .
+
+snomed:312413002 a owl:Class ;
+    rdfs:label "Substance categorized by structure" ;
+    rdfs:subClassOf snomed:105590001 .
+
+snomed:31414002 a owl:Class ;
+    rdfs:label "Amide" ;
+    rdfs:subClassOf snomed:299987008 .
+
+snomed:3265006 a owl:Class ;
+    rdfs:label "Candida" ;
+    rdfs:subClassOf snomed:426013006 .
+
+snomed:35098001 a owl:Class ;
+    rdfs:label "Imidazole" ;
+    rdfs:subClassOf snomed:300903003 .
+
+snomed:372632000 a owl:Class ;
+    rdfs:label "Triazole antifungal" ;
+    rdfs:subClassOf snomed:1197605003,
+        snomed:373236000 .
+
+snomed:372859005 a owl:Class ;
+    rdfs:label "Third generation cephalosporin" ;
+    rdfs:subClassOf snomed:764147003 .
+
+snomed:373218000 a owl:Class ;
+    rdfs:label "Antipseudomonal penicillin" ;
+    rdfs:subClassOf snomed:764146007 .
+
+snomed:373235001 a owl:Class ;
+    rdfs:label "Nitroimidazole" ;
+    rdfs:subClassOf snomed:35098001,
+        snomed:373249005 .
+
+snomed:373236000 a owl:Class ;
+    rdfs:label "Azole antifungal" ;
+    rdfs:subClassOf snomed:300903003,
+        snomed:373219008 .
+
+snomed:373274008 a owl:Class ;
+    rdfs:label "Acylaminopenicillin" ;
+    rdfs:subClassOf snomed:373284009 .
+
+snomed:373284009 a owl:Class ;
+    rdfs:label "Extended spectrum penicillin" ;
+    rdfs:subClassOf snomed:764146007 .
+
+snomed:395959007 a owl:Class ;
+    rdfs:label "Fourth generation cephalosporin" ;
+    rdfs:subClassOf snomed:764147003 .
+
+snomed:406778007 a owl:Class ;
+    rdfs:label "Beta-lactam" ;
+    rdfs:subClassOf snomed:417422007,
+        snomed:771577000 .
+
+snomed:409793007 a owl:Class ;
+    rdfs:label "Resistant bacteria" ;
+    rdfs:subClassOf snomed:409822003 .
+
+snomed:409842007 a owl:Class ;
+    rdfs:label "Bacillales" ;
+    rdfs:subClassOf snomed:416207009 .
+
+snomed:409852006 a owl:Class ;
+    rdfs:label "Proteobacteria" ;
+    rdfs:subClassOf snomed:81325006 .
+
+snomed:410942007 a owl:Class ;
+    rdfs:label "Drug or medicament" ;
+    rdfs:subClassOf snomed:105590001 ;
+    skos:definition "A grouper concept for substances that are used in medicinal products for medical treatment, and also psychoactive substances that have few or no legitimate medical uses or that are not legally available to the person using them." .
+
+snomed:413864003 a owl:Class ;
+    rdfs:label "Gammaproteobacteria" ;
+    rdfs:subClassOf snomed:409852006 .
+
+snomed:414185006 a owl:Class ;
+    rdfs:label "Facultative anaerobic bacteria" ;
+    rdfs:subClassOf snomed:41146007 .
+
+snomed:414225004 a owl:Class ;
+    rdfs:label "Staphylococcaceae" ;
+    rdfs:subClassOf snomed:409842007 .
+
+snomed:414355008 a owl:Class ;
+    rdfs:label "Glycopeptide antibiotic" ;
+    rdfs:subClassOf snomed:301844007,
+        snomed:419241000 .
+
+snomed:414561005 a owl:Class ;
+    rdfs:label "Fungi" ;
+    rdfs:subClassOf snomed:415671008 .
+
+snomed:415098006 a owl:Class ;
+    rdfs:label "Ascomycota" ;
+    rdfs:subClassOf snomed:414561005 .
+
+snomed:415671008 a owl:Class ;
+    rdfs:label "Domain Eukarya" ;
+    rdfs:subClassOf snomed:410607006 .
+
+snomed:416207009 a owl:Class ;
+    rdfs:label "Class Bacilli" ;
+    rdfs:subClassOf snomed:115195009,
+        snomed:8745002 .
+
+snomed:416455007 a owl:Class ;
+    rdfs:label "Form-bacillus" ;
+    rdfs:subClassOf snomed:41146007 .
+
+snomed:416590002 a owl:Class ;
+    rdfs:label "Cyclic peptide" ;
+    rdfs:subClassOf snomed:417174002,
+        snomed:52642002 .
+
+snomed:417174002 a owl:Class ;
+    rdfs:label "Polycyclic compound" ;
+    rdfs:subClassOf snomed:767844004 .
+
+snomed:417422007 a owl:Class ;
+    rdfs:label "Azetidine derivative" ;
+    rdfs:subClassOf snomed:116280007 .
+
+snomed:417937002 a owl:Class ;
+    rdfs:label "Enterobacterales" ;
+    rdfs:subClassOf snomed:413864003,
+        snomed:87172008 .
+
+snomed:426013006 a owl:Class ;
+    rdfs:label "Saccharomycetales" ;
+    rdfs:subClassOf snomed:426951008 .
+
+snomed:426043008 a owl:Class ;
+    rdfs:label "Saccharomycetes" ;
+    rdfs:subClassOf snomed:1354652006 .
+
+snomed:426951008 a owl:Class ;
+    rdfs:label "Saccharomycetidae" ;
+    rdfs:subClassOf snomed:426043008 .
+
+snomed:441900009 a owl:Class ;
+    rdfs:label "Chemical" ;
+    rdfs:subClassOf snomed:312413002 .
+
+snomed:44651000087108 a owl:Class ;
+    rdfs:label "Staphylococcus aureus complex" ;
+    rdfs:subClassOf snomed:65119002 .
+
+snomed:49971000087105 a owl:Class ;
+    rdfs:label "Aerobic Gram-positive coccus" ;
+    rdfs:subClassOf snomed:27471002,
+        snomed:59206002 .
+
+snomed:52642002 a owl:Class ;
+    rdfs:label "Peptide" ;
+    rdfs:subClassOf snomed:415664003 .
+
+snomed:64735005 a owl:Class ;
+    rdfs:label "Escherichia" ;
+    rdfs:subClassOf snomed:106544002 .
+
+snomed:70354003 a owl:Class ;
+    rdfs:label "Polypeptide" ;
+    rdfs:subClassOf snomed:115668003,
+        snomed:415664003 .
+
+snomed:710891006 a owl:Class ;
+    rdfs:label "Methicillin resistant Staphylococcus" ;
+    rdfs:subClassOf snomed:409793007,
+        snomed:65119002 .
+
+snomed:735252001 a owl:Class ;
+    rdfs:label "Protein and/or protein derivative" ;
+    rdfs:subClassOf snomed:115668003 .
+
+snomed:767307008 a owl:Class ;
+    rdfs:label "Nitrogen and/or nitrogen compound" ;
+    rdfs:subClassOf snomed:312415009 .
+
+snomed:771577000 a owl:Class ;
+    rdfs:label "Lactam" ;
+    rdfs:subClassOf snomed:116280007,
+        snomed:31414002 .
+
+snomed:77309002 a owl:Class ;
+    rdfs:label "Coliform bacteria" ;
+    rdfs:subClassOf snomed:87172008 .
+
+snomed:83045001 a owl:Class ;
+    rdfs:label "Cocci" ;
+    rdfs:subClassOf snomed:41146007 .
+
+snomed:88878007 a owl:Class ;
+    rdfs:label "Protein" ;
+    rdfs:subClassOf snomed:70354003,
+        snomed:735252001 .
+
+snomed:115668003 a owl:Class ;
+    rdfs:label "Biological substance" ;
+    rdfs:subClassOf snomed:105590001 .
+
+snomed:299987008 a owl:Class ;
+    rdfs:label "Amide and/or amide derivative" ;
+    rdfs:subClassOf snomed:299979007 .
+
+snomed:312415009 a owl:Class ;
+    rdfs:label "Chemical categorized by structure" ;
+    rdfs:subClassOf snomed:441900009 .
+
+snomed:373219008 a owl:Class ;
+    rdfs:label "Antifungal" ;
+    rdfs:subClassOf snomed:373249005,
+        snomed:766739005 .
+
+snomed:373297006 a owl:Class ;
+    rdfs:label "Beta-lactam antibacterial" ;
+    rdfs:subClassOf snomed:406778007,
+        snomed:419241000 .
+
+snomed:410607006 a owl:Class ;
+    rdfs:label "Organism" .
+
+snomed:41175001 a owl:Class ;
+    rdfs:label "Organic compound" ;
+    rdfs:subClassOf snomed:312415009 .
+
+snomed:415664003 a owl:Class ;
+    rdfs:label "Substituted amide" ;
+    rdfs:subClassOf snomed:299987008 .
+
+snomed:59206002 a owl:Class ;
+    rdfs:label "Gram-positive coccus" ;
+    rdfs:subClassOf snomed:83045001,
+        snomed:8745002 .
+
+snomed:764146007 a owl:Class ;
+    rdfs:label "Penicillin" ;
+    rdfs:subClassOf snomed:373297006 .
+
+snomed:764147003 a owl:Class ;
+    rdfs:label "Cephalosporin" ;
+    rdfs:subClassOf snomed:373297006 .
+
+snomed:766739005 a owl:Class ;
+    rdfs:label "Substance categorized by disposition" ;
+    rdfs:subClassOf snomed:105590001 .
+
+snomed:767844004 a owl:Class ;
+    rdfs:label "Organic cyclic compound" ;
+    rdfs:subClassOf snomed:41175001 .
+
+snomed:87172008 a owl:Class ;
+    rdfs:label "Gram-negative bacillus" ;
+    rdfs:subClassOf snomed:416455007,
+        snomed:81325006 .
+
+snomed:8745002 a owl:Class ;
+    rdfs:label "Gram-positive bacteria" ;
+    rdfs:subClassOf snomed:41146007 .
+
+snomed:116280007 a owl:Class ;
+    rdfs:label "Heterocyclic compound" ;
+    rdfs:subClassOf snomed:767844004 .
+
+snomed:299979007 a owl:Class ;
+    rdfs:label "Organic nitrogen compound" ;
+    rdfs:subClassOf snomed:11257001,
+        snomed:41175001 .
+
+snomed:300903003 a owl:Class ;
+    rdfs:label "Azole" ;
+    rdfs:subClassOf snomed:116280007,
+        snomed:299979007 .
+
+snomed:373249005 a owl:Class ;
+    rdfs:label "Anti-infective agent" ;
+    rdfs:subClassOf snomed:410942007 .
+
+snomed:65119002 a owl:Class ;
+    rdfs:label "Staphylococcus" ;
+    rdfs:subClassOf snomed:243226004,
+        snomed:414185006,
+        snomed:414225004 .
+
+snomed:81325006 a owl:Class ;
+    rdfs:label "Gram-negative bacterium" ;
+    rdfs:subClassOf snomed:41146007 .
+
+snomed:105590001 a owl:Class ;
+    rdfs:label "Substance" .
+
+snomed:409822003 a owl:Class ;
+    rdfs:label "Domain Bacteria" ;
+    rdfs:subClassOf snomed:410607006 .
+
+snomed:419241000 a owl:Class ;
+    rdfs:label "Antibacterial" ;
+    rdfs:subClassOf snomed:373249005,
+        snomed:766739005 .
+
+snomed:41146007 a owl:Class ;
+    rdfs:label "Bacterium" ;
+    rdfs:subClassOf snomed:409822003 .
+
